@@ -1,0 +1,6 @@
+{
+  "name": "Digital Planeringstavla med QR-flöde",
+  "description": "Interaktiv digital planeringstavla för produktion med anpassningsbara kolumnrubriker, QR-kodgenerering, etikettutskrift och realtidsskanning för statusuppdateringar.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
