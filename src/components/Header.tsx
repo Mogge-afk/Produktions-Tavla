@@ -17,7 +17,8 @@ import {
   Archive,
   Zap,
   Radio,
-  Smartphone
+  Smartphone,
+  Clock
 } from 'lucide-react';
 import { Priority } from '../types';
 
@@ -31,6 +32,8 @@ interface HeaderProps {
   onOpenFloorGuide: () => void;
   onOpenHardwareGuide: () => void;
   onOpenArchive: () => void;
+  onOpenOfflineQueue?: () => void;
+  offlineQueueCount?: number;
   onRefreshPriorities: () => void;
   searchQuery: string;
   onSearchChange: (q: string) => void;
@@ -53,6 +56,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenFloorGuide,
   onOpenHardwareGuide,
   onOpenArchive,
+  onOpenOfflineQueue,
+  offlineQueueCount = 0,
   onRefreshPriorities,
   searchQuery,
   onSearchChange,
@@ -109,11 +114,35 @@ export const Header: React.FC<HeaderProps> = ({
                 <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-xs font-bold ${
                   syncStatus === 'connected'
                     ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                    : syncStatus === 'offline'
+                    ? 'bg-rose-50 border-rose-300 text-rose-800'
                     : 'bg-amber-50 border-amber-300 text-amber-800'
                 }`}>
-                  <span className={`w-2 h-2 rounded-full ${syncStatus === 'connected' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
-                  <span>{syncStatus === 'connected' ? 'Realtid' : 'Ansluter...'}</span>
+                  <span className={`w-2 h-2 rounded-full ${
+                    syncStatus === 'connected' ? 'bg-emerald-500 animate-pulse' : syncStatus === 'offline' ? 'bg-rose-500' : 'bg-amber-500'
+                  }`} />
+                  <span>{syncStatus === 'connected' ? 'Realtid' : syncStatus === 'offline' ? 'Offline' : 'Ansluter...'}</span>
                 </div>
+
+                {onOpenOfflineQueue && (
+                  <button
+                    onClick={onOpenOfflineQueue}
+                    type="button"
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-xs font-bold transition cursor-pointer ${
+                      offlineQueueCount > 0
+                        ? 'bg-amber-500 hover:bg-amber-600 text-neutral-950 border-amber-600 shadow-xs animate-pulse ring-2 ring-amber-400/40'
+                        : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-600 border-neutral-300'
+                    }`}
+                    title="Offline-kö: Hantera QR-skanningar som väntar på uppkoppling"
+                  >
+                    <Clock className="w-3 h-3 text-neutral-800" />
+                    <span>
+                      {offlineQueueCount > 0
+                        ? `${offlineQueueCount} väntar på nätverk`
+                        : 'Offline-kö (0)'}
+                    </span>
+                  </button>
+                )}
               </div>
               <p className="text-xs text-neutral-500 font-medium mt-0.5">
                 Produktionsflöde & QR-spårning · {totalOrdersCount} aktiva tillverkningsordrar
@@ -134,7 +163,7 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Action Buttons */}
           <div className="flex flex-wrap items-center gap-2">
             
-            {/* Excel / IFS Import Button - High visibility */}
+            {/* Excel Import Button - High visibility */}
             <button
               onClick={onOpenExcelImport}
               type="button"

@@ -27,10 +27,12 @@ import { FloorGuideModal } from './components/FloorGuideModal';
 import { ArchiveModal } from './components/ArchiveModal';
 import { MobileScannerView } from './components/MobileScannerView';
 import { HardwareGuideModal } from './components/HardwareGuideModal';
+import { OfflineQueueModal } from './components/OfflineQueueModal';
 import { playScanSuccessSound } from './utils/audio';
 import { refreshOrderPriorities, loadPrioritySettings } from './utils/priority';
 import { extractScanPayload, determineNextColumn } from './utils/qr';
 import { apiSync, SyncStatus } from './utils/apiSync';
+import { offlineQueue } from './utils/offlineQueue';
 import { CheckCircle2, AlertCircle, Zap, Undo2 } from 'lucide-react';
 
 interface ToastState {
@@ -87,6 +89,8 @@ export default function App() {
   const [isFloorGuideOpen, setIsFloorGuideOpen] = useState(false);
   const [isHardwareGuideOpen, setIsHardwareGuideOpen] = useState(false);
   const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
+  const [isOfflineQueueOpen, setIsOfflineQueueOpen] = useState(false);
+  const [offlineQueueCount, setOfflineQueueCount] = useState<number>(() => offlineQueue.getQueueCount());
 
   // Mobile dedicated scanner view on shop floor
   const [isMobileScannerMode, setIsMobileScannerMode] = useState<boolean>(() => {
@@ -194,10 +198,33 @@ export default function App() {
       }
     });
 
+    const unsubQueue = offlineQueue.onQueueChange((q) => {
+      setOfflineQueueCount(q.length);
+    });
+
+    // Auto-drain offline queue when network connectivity returns
+    const handleOnlineAutoSync = async () => {
+      if (offlineQueue.getQueueCount() > 0) {
+        const countBefore = offlineQueue.getQueueCount();
+        const res = await offlineQueue.processQueue();
+        if (res.processed > 0) {
+          playScanSuccessSound();
+          showToast(
+            `✓ Återansluten till nätverket! ${res.processed} offline-skanningar har synkats till tavlan.`,
+            'success'
+          );
+        }
+      }
+    };
+
+    window.addEventListener('online', handleOnlineAutoSync);
+
     return () => {
       unsubStatus();
       unsubState();
       unsubScan();
+      unsubQueue();
+      window.removeEventListener('online', handleOnlineAutoSync);
     };
   }, [showToast]);
 
@@ -358,6 +385,8 @@ export default function App() {
         note: `Automatisk stationsflytt vid QR-skanning`,
       };
 
+      const isCurrentlyOffline = !offlineQueue.isOnline() || syncStatus === 'offline';
+
       setOrders((prev) => {
         const next = prev.map((ord) => {
           if (ord.id === targetOrder.id) {
@@ -376,32 +405,63 @@ export default function App() {
           return ord;
         });
         saveStoredOrders(next);
-        apiSync.syncOrders(next);
+
+        if (isCurrentlyOffline) {
+          offlineQueue.enqueueScan({
+            rawScan: `ORD:${targetOrder.id}:${stationIdToMarkDone}`,
+            orderId: targetOrder.id,
+            stationId: stationIdToMarkDone,
+            targetStationTitle: nextColumn.title,
+            operator: op,
+            quantity: newQtyDone,
+          });
+        } else {
+          apiSync.syncOrders(next);
+        }
+
         return next;
       });
 
       flashUpdatedCard(targetOrder.id);
       playScanSuccessSound();
 
-      showToast(
-        `✓ ${targetOrder.id}: Flyttad från "${fromColTitle}" till "${nextColumn.title}"!`,
-        'success',
-        {
-          label: 'Ångra',
-          onClick: () => {
-            handleMoveOrder(targetOrder.id, previousColumnId);
-            showToast(`Flytt av ${targetOrder.id} ångrades.`, 'info');
+      if (isCurrentlyOffline) {
+        showToast(
+          `📴 Offline: ${targetOrder.id} flyttades till "${nextColumn.title}" lokalt och lades i kön tills nätverket återkommer.`,
+          'info',
+          {
+            label: 'Visa kö',
+            onClick: () => setIsOfflineQueueOpen(true),
           },
-        },
-        {
-          label: 'Ändra antal / avvikelse',
-          onClick: () => {
-            setScannedOrder(targetOrder);
-            setScannedTargetStationId(nextColumn.id);
-            setIsQuickUpdateOpen(true);
+          {
+            label: 'Ångra',
+            onClick: () => {
+              handleMoveOrder(targetOrder.id, previousColumnId);
+              showToast(`Flytt av ${targetOrder.id} ångrades.`, 'info');
+            },
+          }
+        );
+      } else {
+        showToast(
+          `✓ ${targetOrder.id}: Flyttad från "${fromColTitle}" till "${nextColumn.title}"!`,
+          'success',
+          {
+            label: 'Ångra',
+            onClick: () => {
+              handleMoveOrder(targetOrder.id, previousColumnId);
+              showToast(`Flytt av ${targetOrder.id} ångrades.`, 'info');
+            },
           },
-        }
-      );
+          {
+            label: 'Ändra antal / avvikelse',
+            onClick: () => {
+              setScannedOrder(targetOrder);
+              setScannedTargetStationId(nextColumn.id);
+              setIsQuickUpdateOpen(true);
+            },
+          }
+        );
+      }
     },
     [columns, flashUpdatedCard, handleArchiveOrder, handleMoveOrder, showToast]
   );
@@ -946,6 +1006,8 @@ export default function App() {
         autoAdvanceEnabled={autoAdvanceOnScan}
         onToggleAutoAdvance={handleToggleAutoAdvance}
         syncStatus={syncStatus}
+        offlineQueueCount={offlineQueueCount}
+        onOpenOfflineQueue={() => setIsOfflineQueueOpen(true)}
       />
 
       {/* Production KPIs & Quick Actions Bar */}
@@ -1084,6 +1146,18 @@ export default function App() {
         isOpen={isHardwareGuideOpen}
         onClose={() => setIsHardwareGuideOpen(false)}
         onOpenMobileMode={() => setIsMobileScannerMode(true)}
+        onOpenOfflineQueue={() => setIsOfflineQueueOpen(true)}
+      />
+
+      {/* MODAL 12: Offline Scan Queue & Internet Loss Handler */}
+      <OfflineQueueModal
+        isOpen={isOfflineQueueOpen}
+        onClose={() => setIsOfflineQueueOpen(false)}
+        columns={columns}
+        onManualSyncTriggered={() => {
+          playScanSuccessSound();
+          showToast('✓ Offline-kön har synkroniserats med servern!');
+        }}
       />
     </div>
   );

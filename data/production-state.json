@@ -12,13 +12,101 @@
       "targetDate": "2026-10-02",
       "drawingNumber": "RIT-4421-C",
       "createdAt": "2026-09-29T10:03:40.557Z",
-      "updatedAt": "2026-09-30T10:03:53.695Z",
+      "updatedAt": "2026-09-30T11:53:52.800Z",
       "operator": "Kalle.K",
       "tags": [
         "CNC-fräst",
         "Härdat stål"
       ],
       "reports": [
+        {
+          "id": "rep_1790769232800",
+          "timestamp": "2026-09-30T11:53:52.800Z",
+          "stationId": "col-montering",
+          "stationName": "Montering",
+          "operator": "TestOperatör",
+          "quantity": 100,
+          "totalSoFar": 100,
+          "orderTotal": 100,
+          "note": "Skannad och flyttad via realtids-API"
+        },
+        {
+          "id": "rep_1790763095785",
+          "timestamp": "2026-09-30T10:11:35.785Z",
+          "stationId": "col-planerat",
+          "stationName": "Planerat",
+          "operator": "Operatör",
+          "quantity": 100,
+          "totalSoFar": 100,
+          "orderTotal": 100,
+          "note": "Skannad och flyttad via realtids-API"
+        },
+        {
+          "id": "rep_1790763095646",
+          "timestamp": "2026-09-30T10:11:35.646Z",
+          "stationId": "col-planerat",
+          "stationName": "Planerat",
+          "operator": "Operatör",
+          "quantity": 100,
+          "totalSoFar": 100,
+          "orderTotal": 100,
+          "note": "Skannad och flyttad via realtids-API"
+        },
+        {
+          "id": "rep_1790763095507",
+          "timestamp": "2026-09-30T10:11:35.507Z",
+          "stationId": "col-planerat",
+          "stationName": "Planerat",
+          "operator": "Operatör",
+          "quantity": 100,
+          "totalSoFar": 100,
+          "orderTotal": 100,
+          "note": "Skannad och flyttad via realtids-API"
+        },
+        {
+          "id": "rep_1790763095374",
+          "timestamp": "2026-09-30T10:11:35.374Z",
+          "stationId": "col-planerat",
+          "stationName": "Planerat",
+          "operator": "Operatör",
+          "quantity": 100,
+          "totalSoFar": 100,
+          "orderTotal": 100,
+          "note": "Skannad och flyttad via realtids-API"
+        },
+        {
+          "id": "rep_1790763095305",
+          "timestamp": "2026-09-30T10:11:35.305Z",
+          "stationId": "col-planerat",
+          "stationName": "Planerat",
+          "operator": "Operatör",
+          "quantity": 100,
+          "totalSoFar": 100,
+          "orderTotal": 100,
+          "note": "Skannad och flyttad via realtids-API"
+        },
+        {
+          "id": "rep_1790763095112",
+          "timestamp": "2026-09-30T10:11:35.112Z",
+          "stationId": "col-planerat",
+          "stationName": "Planerat",
+          "operator": "Operatör",
+          "quantity": 100,
+          "totalSoFar": 100,
+          "orderTotal": 100,
+          "note": "Skannad och flyttad via realtids-API"
+        },
+        {
+          "id": "rep_1790763094953",
+          "timestamp": "2026-09-30T10:11:34.953Z",
+          "stationId": "col-planerat",
+          "stationName": "Planerat",
+          "operator": "Operatör",
+          "quantity": 100,
+          "totalSoFar": 100,
+          "orderTotal": 100,
+          "note": "Skannad och flyttad via realtids-API"
+        },
         {
           "id": "rep_1790762633695",
           "timestamp": "2026-09-30T10:03:53.695Z",
@@ -33,9 +121,74 @@
       ],
       "stationProgress": {
         "col-material": 100,
-        "col-montering": 100
+        "col-montering": 100,
+        "col-planerat": 100
       },
       "notes": [
+        {
+          "id": "n_scan_1790769232800",
+          "timestamp": "2026-09-30T11:53:52.800Z",
+          "operator": "TestOperatör",
+          "text": "Skannad vid \"Montering\" ➔ automatiskt flyttad till \"Test\".",
+          "type": "stage_change",
+          "stageName": "Test"
+        },
+        {
+          "id": "n_scan_1790763095785",
+          "timestamp": "2026-09-30T10:11:35.785Z",
+          "operator": "Operatör",
+          "text": "Skannad vid \"Planerat\" ➔ automatiskt flyttad till \"Material uttaget\".",
+          "type": "stage_change",
+          "stageName": "Material uttaget"
+        },
+        {
+          "id": "n_scan_1790763095646",
+          "timestamp": "2026-09-30T10:11:35.646Z",
+          "operator": "Operatör",
+          "text": "Skannad vid \"Planerat\" ➔ automatiskt flyttad till \"Material uttaget\".",
+          "type": "stage_change",
+          "stageName": "Material uttaget"
+        },
+        {
+          "id": "n_scan_1790763095507",
+          "timestamp": "2026-09-30T10:11:35.507Z",
+          "operator": "Operatör",
+          "text": "Skannad vid \"Planerat\" ➔ automatiskt flyttad till \"Material uttaget\".",
+          "type": "stage_change",
+          "stageName": "Material uttaget"
+        },
+        {
+          "id": "n_scan_1790763095374",
+          "timestamp": "2026-09-30T10:11:35.374Z",
+          "operator": "Operatör",
+          "text": "Skannad vid \"Planerat\" ➔ automatiskt flyttad till \"Material uttaget\".",
+          "type": "stage_change",
+          "stageName": "Material uttaget"
+        },
+        {
+          "id": "n_scan_1790763095305",
+          "timestamp": "2026-09-30T10:11:35.305Z",
+          "operator": "Operatör",
+          "text": "Skannad vid \"Planerat\" ➔ automatiskt flyttad till \"Material uttaget\".",
+          "type": "stage_change",
+          "stageName": "Material uttaget"
+        },
+        {
+          "id": "n_scan_1790763095112",
+          "timestamp": "2026-09-30T10:11:35.112Z",
+          "operator": "Operatör",
+          "text": "Skannad vid \"Planerat\" ➔ automatiskt flyttad till \"Material uttaget\".",
+          "type": "stage_change",
+          "stageName": "Material uttaget"
+        },
+        {
+          "id": "n_scan_1790763094953",
+          "timestamp": "2026-09-30T10:11:34.953Z",
+          "operator": "Operatör",
+          "text": "Skannad vid \"Planerat\" ➔ automatiskt flyttad till \"Material uttaget\".",
+          "type": "stage_change",
+          "stageName": "Material uttaget"
+        },
         {
           "id": "n_scan_1790762633695",
           "timestamp": "2026-09-30T10:03:53.695Z",
@@ -63,23 +216,140 @@
       "batchSize": 20,
       "unit": "st",
       "priority": "urgent",
-      "columnId": "col-test",
+      "columnId": "col-leverans",
       "targetDate": "2026-10-01",
       "drawingNumber": "EL-9081",
       "createdAt": "2026-09-28T10:03:40.557Z",
-      "updatedAt": "2026-09-30T10:03:40.557Z",
+      "updatedAt": "2026-09-30T10:12:20.766Z",
       "operator": "Mikael.L",
       "tags": [
         "PLC-styrning",
         "24V"
       ],
-      "reports": [],
+      "reports": [
+        {
+          "id": "rep_1790763140766",
+          "timestamp": "2026-09-30T10:12:20.766Z",
+          "stationId": "col-packning",
+          "stationName": "Packning",
+          "operator": "Operatör",
+          "quantity": 20,
+          "totalSoFar": 20,
+          "orderTotal": 20,
+          "note": "Skannad och flyttad via realtids-API"
+        },
+        {
+          "id": "rep_1790763140628",
+          "timestamp": "2026-09-30T10:12:20.628Z",
+          "stationId": "col-packning",
+          "stationName": "Packning",
+          "operator": "Operatör",
+          "quantity": 20,
+          "totalSoFar": 20,
+          "orderTotal": 20,
+          "note": "Skannad och flyttad via realtids-API"
+        },
+        {
+          "id": "rep_1790763129933",
+          "timestamp": "2026-09-30T10:12:09.933Z",
+          "stationId": "col-test",
+          "stationName": "Test",
+          "operator": "Operatör",
+          "quantity": 20,
+          "totalSoFar": 20,
+          "orderTotal": 20,
+          "note": "Skannad och flyttad via realtids-API"
+        },
+        {
+          "id": "rep_1790763129794",
+          "timestamp": "2026-09-30T10:12:09.794Z",
+          "stationId": "col-test",
+          "stationName": "Test",
+          "operator": "Operatör",
+          "quantity": 20,
+          "totalSoFar": 20,
+          "orderTotal": 20,
+          "note": "Skannad och flyttad via realtids-API"
+        },
+        {
+          "id": "rep_1790763129646",
+          "timestamp": "2026-09-30T10:12:09.646Z",
+          "stationId": "col-test",
+          "stationName": "Test",
+          "operator": "Operatör",
+          "quantity": 20,
+          "totalSoFar": 20,
+          "orderTotal": 20,
+          "note": "Skannad och flyttad via realtids-API"
+        },
+        {
+          "id": "rep_1790763129524",
+          "timestamp": "2026-09-30T10:12:09.524Z",
+          "stationId": "col-test",
+          "stationName": "Test",
+          "operator": "Operatör",
+          "quantity": 20,
+          "totalSoFar": 20,
+          "orderTotal": 20,
+          "note": "Skannad och flyttad via realtids-API"
+        }
+      ],
       "stationProgress": {
         "col-material": 20,
         "col-montering": 20,
-        "col-test": 5
+        "col-test": 20,
+        "col-packning": 20
       },
-      "notes": [],
+      "notes": [
+        {
+          "id": "n_scan_1790763140766",
+          "timestamp": "2026-09-30T10:12:20.766Z",
+          "operator": "Operatör",
+          "text": "Skannad vid \"Packning\" ➔ automatiskt flyttad till \"Klar för leverans\".",
+          "type": "stage_change",
+          "stageName": "Klar för leverans"
+        },
+        {
+          "id": "n_scan_1790763140628",
+          "timestamp": "2026-09-30T10:12:20.628Z",
+          "operator": "Operatör",
+          "text": "Skannad vid \"Packning\" ➔ automatiskt flyttad till \"Klar för leverans\".",
+          "type": "stage_change",
+          "stageName": "Klar för leverans"
+        },
+        {
+          "id": "n_scan_1790763129933",
+          "timestamp": "2026-09-30T10:12:09.933Z",
+          "operator": "Operatör",
+          "text": "Skannad vid \"Test\" ➔ automatiskt flyttad till \"Packning\".",
+          "type": "stage_change",
+          "stageName": "Packning"
+        },
+        {
+          "id": "n_scan_1790763129794",
+          "timestamp": "2026-09-30T10:12:09.794Z",
+          "operator": "Operatör",
+          "text": "Skannad vid \"Test\" ➔ automatiskt flyttad till \"Packning\".",
+          "type": "stage_change",
+          "stageName": "Packning"
+        },
+        {
+          "id": "n_scan_1790763129647",
+          "timestamp": "2026-09-30T10:12:09.646Z",
+          "operator": "Operatör",
+          "text": "Skannad vid \"Test\" ➔ automatiskt flyttad till \"Packning\".",
+          "type": "stage_change",
+          "stageName": "Packning"
+        },
+        {
+          "id": "n_scan_1790763129524",
+          "timestamp": "2026-09-30T10:12:09.524Z",
+          "operator": "Operatör",
+          "text": "Skannad vid \"Test\" ➔ automatiskt flyttad till \"Packning\".",
+          "type": "stage_change",
+          "stageName": "Packning"
+        }
+      ],
       "checklists": {}
     },
     {
@@ -155,5 +425,5 @@
     }
   ],
   "archivedOrders": [],
-  "lastUpdated": "2026-09-30T10:03:53.695Z"
+  "lastUpdated": "2026-09-30T11:53:52.801Z"
 }

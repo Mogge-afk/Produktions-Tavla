@@ -1,9 +1,11 @@
 import { ProductionOrder, ColumnConfig } from '../types';
+import { offlineQueue, QueuedScanItem } from './offlineQueue';
 
 export type SyncStatus = 'connected' | 'connecting' | 'offline';
 
 export interface ScanApiResponse {
   success: boolean;
+  queuedOffline?: boolean;
   orderId?: string;
   from?: string;
   to?: string;
@@ -55,6 +57,8 @@ class ApiSyncManager {
 
       this.eventSource.onopen = () => {
         this.setStatus('connected');
+        // Drain any offline queued scans once connected
+        offlineQueue.processQueue();
       };
 
       this.eventSource.onmessage = (event) => {
@@ -147,21 +151,52 @@ class ApiSyncManager {
 
   // Send scan payload to backend API
   public async postScan(payload: string | { scan?: string; orderId?: string; stationId?: string; operator?: string; quantity?: number }): Promise<ScanApiResponse> {
+    const rawString = typeof payload === 'string' ? payload : (payload.scan || payload.orderId || '');
+    const objPayload = typeof payload === 'string' ? { scan: payload } : payload;
+
+    // 1. If currently offline, queue immediately without waiting for timeout
+    if (!offlineQueue.isOnline()) {
+      const queued = offlineQueue.enqueueScan({
+        rawScan: rawString,
+        orderId: objPayload.orderId,
+        stationId: objPayload.stationId,
+        operator: objPayload.operator,
+        quantity: objPayload.quantity,
+      });
+
+      return {
+        success: true,
+        queuedOffline: true,
+        orderId: queued.orderId,
+        message: `📴 Offline: Skanningen sparades i kön (${queued.orderId}). Skickas automatiskt så fort anslutningen återvänder!`,
+      };
+    }
+
     try {
-      const body = typeof payload === 'string' ? { scan: payload } : payload;
       const res = await fetch('/api/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify(objPayload),
       });
 
       const data = await res.json();
       return data;
     } catch (err: any) {
-      console.error('Error posting scan to /api/scan:', err);
+      console.warn('Network call failed in postScan, queueing offline:', err);
+      // 2. Network dropped during fetch, queue for auto-retry
+      const queued = offlineQueue.enqueueScan({
+        rawScan: rawString,
+        orderId: objPayload.orderId,
+        stationId: objPayload.stationId,
+        operator: objPayload.operator,
+        quantity: objPayload.quantity,
+      });
+
       return {
-        success: false,
-        error: err.message || 'Kunde inte nå server-API',
+        success: true,
+        queuedOffline: true,
+        orderId: queued.orderId,
+        message: `📴 Nätverket svarade inte – skanningen sparades i offline-kön (${queued.orderId}) och skickas när kontakten återupprättas!`,
       };
     }
   }

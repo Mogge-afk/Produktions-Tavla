@@ -12,12 +12,16 @@ import {
   WifiOff, 
   Layers,
   Sparkles,
-  Volume2
+  Volume2,
+  Clock,
+  ShieldCheck
 } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { ProductionOrder, ColumnConfig } from '../types';
 import { apiSync, ScanApiResponse, SyncStatus } from '../utils/apiSync';
+import { offlineQueue, QueuedScanItem } from '../utils/offlineQueue';
 import { playScanSuccessSound } from '../utils/audio';
+import { OfflineQueueModal } from './OfflineQueueModal';
 
 interface MobileScannerViewProps {
   columns: ColumnConfig[];
@@ -38,6 +42,8 @@ export const MobileScannerView: React.FC<MobileScannerViewProps> = ({
   const [isScanning, setIsScanning] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [manualInput, setManualInput] = useState('');
+  const [queueCount, setQueueCount] = useState<number>(0);
+  const [isOfflineModalOpen, setIsOfflineModalOpen] = useState(false);
   
   // Last scan feedback
   const [lastScanResult, setLastScanResult] = useState<ScanApiResponse | null>(null);
@@ -46,9 +52,15 @@ export const MobileScannerView: React.FC<MobileScannerViewProps> = ({
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const scannerContainerId = 'mobile-live-reader';
 
-  // Listen to server connection status
+  // Listen to server connection status & queue updates
   useEffect(() => {
-    return apiSync.onStatusChange(setSyncStatus);
+    setQueueCount(offlineQueue.getQueueCount());
+    const unsubStatus = apiSync.onStatusChange(setSyncStatus);
+    const unsubQueue = offlineQueue.onQueueChange((q) => setQueueCount(q.length));
+    return () => {
+      unsubStatus();
+      unsubQueue();
+    };
   }, []);
 
   // Initialize camera scanner
@@ -170,14 +182,48 @@ export const MobileScannerView: React.FC<MobileScannerViewProps> = ({
           </div>
         </div>
 
-        <button
-          onClick={onExitMobileMode}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 rounded-lg text-xs font-bold transition cursor-pointer"
-        >
-          <Tv className="w-3.5 h-3.5 text-sky-400" />
-          <span>Visa Tavla</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {queueCount > 0 && (
+            <button
+              onClick={() => setIsOfflineModalOpen(true)}
+              type="button"
+              className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-neutral-950 font-black rounded-lg text-xs transition cursor-pointer shadow-xs animate-pulse"
+              title="Visa offline-kö för QR-skanningar"
+            >
+              <Clock className="w-3.5 h-3.5" />
+              <span>{queueCount} i kö</span>
+            </button>
+          )}
+
+          <button
+            onClick={onExitMobileMode}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 rounded-lg text-xs font-bold transition cursor-pointer"
+          >
+            <Tv className="w-3.5 h-3.5 text-sky-400" />
+            <span>Visa Tavla</span>
+          </button>
+        </div>
       </header>
+
+      {/* Offline Status Warning Strip if connection lost or queue has items */}
+      {(syncStatus === 'offline' || queueCount > 0) && (
+        <div className="px-4 py-2 bg-amber-500/15 border-b border-amber-500/30 flex items-center justify-between text-xs text-amber-300">
+          <div className="flex items-center gap-2">
+            <WifiOff className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />
+            <span>
+              {syncStatus === 'offline' 
+                ? 'Nätverk nere: Skanningar sparas i telefonen och synkas automatiskt.'
+                : `${queueCount} skanning(ar) ligger i kön och väntar på synkronisering.`}
+            </span>
+          </div>
+          <button
+            onClick={() => setIsOfflineModalOpen(true)}
+            className="underline font-bold text-amber-400 hover:text-white cursor-pointer"
+          >
+            Hantera kö
+          </button>
+        </div>
+      )}
 
       {/* Operator & Station Filter Controls */}
       <div className="p-3 bg-neutral-900/60 border-b border-neutral-800 flex flex-wrap items-center gap-2 text-xs">
@@ -233,16 +279,32 @@ export const MobileScannerView: React.FC<MobileScannerViewProps> = ({
           </div>
         )}
 
-        {/* Live Feedback Banner on Successful Scan */}
+        {/* Live Feedback Banner on Scan */}
         {lastScanResult && (
           <div
             className={`mt-4 w-full max-w-sm p-4 rounded-xl border-2 text-center animate-in zoom-in-95 duration-150 shadow-2xl ${
-              lastScanResult.success
+              lastScanResult.queuedOffline
+                ? 'bg-amber-950/90 border-amber-400 text-amber-100'
+                : lastScanResult.success
                 ? 'bg-emerald-950 border-emerald-400 text-emerald-100'
                 : 'bg-rose-950 border-rose-500 text-rose-100'
             }`}
           >
-            {lastScanResult.success ? (
+            {lastScanResult.queuedOffline ? (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-center gap-1.5 text-amber-400 font-black text-sm uppercase tracking-wide">
+                  <Clock className="w-5 h-5 animate-pulse" />
+                  <span>Sparad Offline ({lastScanResult.orderId})</span>
+                </div>
+                <p className="text-xs text-amber-200">
+                  {lastScanResult.message}
+                </p>
+                <div className="text-[10px] text-amber-400 font-mono mt-1 flex items-center justify-center gap-1">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>Ligger tryggt i kön · Flyttas automatiskt vid uppkoppling</span>
+                </div>
+              </div>
+            ) : lastScanResult.success ? (
               <div className="space-y-1">
                 <div className="flex items-center justify-center gap-1.5 text-emerald-400 font-black text-base">
                   <CheckCircle2 className="w-5 h-5" />
@@ -294,6 +356,13 @@ export const MobileScannerView: React.FC<MobileScannerViewProps> = ({
           Varje skanning uppdaterar direkt planeringstavlan på TV-skärmen i realtid via serverns API.
         </p>
       </div>
+
+      {/* Offline Queue Details Modal */}
+      <OfflineQueueModal
+        isOpen={isOfflineModalOpen}
+        onClose={() => setIsOfflineModalOpen(false)}
+        columns={columns}
+      />
 
     </div>
   );

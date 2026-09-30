@@ -15,7 +15,10 @@ import {
   Tv,
   HelpCircle,
   Sparkles,
-  Wifi
+  Wifi,
+  WifiOff,
+  Clock,
+  ShieldCheck
 } from 'lucide-react';
 import { generateQRCodeDataUrl } from '../utils/qr';
 
@@ -23,14 +26,16 @@ interface HardwareGuideModalProps {
   isOpen: boolean;
   onClose: () => void;
   onOpenMobileMode: () => void;
+  onOpenOfflineQueue?: () => void;
 }
 
 export const HardwareGuideModal: React.FC<HardwareGuideModalProps> = ({
   isOpen,
   onClose,
   onOpenMobileMode,
+  onOpenOfflineQueue,
 }) => {
-  const [activeTab, setActiveTab] = useState<'recommendation' | 'mobile_pairing' | 'api_docs' | 'bluetooth_vs_rf'>('recommendation');
+  const [activeTab, setActiveTab] = useState<'recommendation' | 'mobile_pairing' | 'bluetooth_vs_rf' | 'offline_queue' | 'api_docs'>('recommendation');
   const [mobileUrlQR, setMobileUrlQR] = useState<string>('');
   const [copiedText, setCopiedText] = useState<string | null>(null);
 
@@ -134,10 +139,22 @@ print(response.json()) # Returnerar: {"success": True, "to": "Test", ...}`;
           </button>
 
           <button
+            onClick={() => setActiveTab('offline_queue')}
+            className={`py-3 px-4 flex items-center gap-1.5 whitespace-nowrap transition cursor-pointer border-b-2 ${
+              activeTab === 'offline_queue'
+                ? 'border-neutral-950 text-neutral-950 bg-white font-black'
+                : 'border-transparent text-neutral-600 hover:text-neutral-900'
+            }`}
+          >
+            <WifiOff className="w-4 h-4 text-amber-600" />
+            <span>Offline & Nätverksbortfall</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('api_docs')}
             className={`py-3 px-4 flex items-center gap-1.5 whitespace-nowrap transition cursor-pointer border-b-2 ${
               activeTab === 'api_docs'
-                ? 'border-neutral-950 text-neutral-950 bg-white'
+                ? 'border-neutral-950 text-neutral-950 bg-white font-black'
                 : 'border-transparent text-neutral-600 hover:text-neutral-900'
             }`}
           >
@@ -375,6 +392,84 @@ print(response.json()) # Returnerar: {"success": True, "to": "Test", ...}`;
                   1. Börja direkt med <strong>Mobiltelefoner / Surfplattor</strong> – det är färdigbyggt nu, kostar 0 kr och kräver inga installationer.<br />
                   2. Om ni vill ha en dedikerad fysisk pistol vid packning eller montering: Köp en <strong>2.4 GHz trådlös industriskanner med USB-basstation</strong> (kostar under en tusenlapp och fungerar direkt utan räckviddsproblem).
                 </p>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: Offline queue & internet loss handling */}
+          {activeTab === 'offline_queue' && (
+            <div className="space-y-5">
+              <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-xl space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 bg-amber-500 text-neutral-950 rounded-lg">
+                    <WifiOff className="w-5 h-5" />
+                  </div>
+                  <h3 className="font-black text-amber-950 text-base">
+                    Vad händer om verkstadens Wi-Fi eller internet går ner?
+                  </h3>
+                </div>
+                <p className="text-xs sm:text-sm text-amber-900 leading-relaxed">
+                  Systemet har ett inbyggt <strong>Offline-First kösystem</strong>. Om nätverket tillfälligt försvinner, en operatör går in i ett hörn av lagret utan Wi-Fi-täckning, eller om servern startas om, <strong>går inga QR-skanningar förlorade</strong>!
+                </p>
+              </div>
+
+              {/* How it works 3-step diagram */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="p-4 bg-white border border-neutral-300 rounded-xl space-y-2">
+                  <div className="flex items-center gap-2 text-amber-600 font-black text-xs uppercase tracking-wider">
+                    <Clock className="w-4 h-4" />
+                    <span>Steg 1: Lokal buffert</span>
+                  </div>
+                  <h4 className="font-bold text-sm text-neutral-900">Sparas i webbläsaren</h4>
+                  <p className="text-xs text-neutral-600 leading-relaxed">
+                    När en QR-kod skannas utan nätverkskontakt sparas hela registreringsunderlaget i webbläsarens interna <code>LocalStorage</code>. Även om telefonen stängs av finns skanningen kvar.
+                  </p>
+                </div>
+
+                <div className="p-4 bg-white border border-neutral-300 rounded-xl space-y-2">
+                  <div className="flex items-center gap-2 text-sky-600 font-black text-xs uppercase tracking-wider">
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>Steg 2: Tydlig feedback</span>
+                  </div>
+                  <h4 className="font-bold text-sm text-neutral-900">Operatören vet läget</h4>
+                  <p className="text-xs text-neutral-600 leading-relaxed">
+                    Skärmen visar en gul bekräftelse: <em>"Sparad offline! Flyttas till Test så fort kontakten återupprättas."</em> Operatören kan fortsätta jobba utan avbrott.
+                  </p>
+                </div>
+
+                <div className="p-4 bg-white border border-neutral-300 rounded-xl space-y-2">
+                  <div className="flex items-center gap-2 text-emerald-600 font-black text-xs uppercase tracking-wider">
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Steg 3: Automatisk tömning</span>
+                  </div>
+                  <h4 className="font-bold text-sm text-neutral-900">Auto-synk i FIFO-ordning</h4>
+                  <p className="text-xs text-neutral-600 leading-relaxed">
+                    Så fort enheten får Wi-Fi eller nätverkskontakt skickas alla sparade skanningar i exakt kronologisk ordning. TV-tavlan flyttar orderna och kvitterar med en grön ljudsignal.
+                  </p>
+                </div>
+              </div>
+
+              {/* Action & Direct access */}
+              <div className="p-4 bg-neutral-900 text-white rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="space-y-1 text-center sm:text-left">
+                  <h4 className="font-black text-sm text-white">Vill du se eller testa offline-kön?</h4>
+                  <p className="text-xs text-neutral-400">
+                    Öppna kön för att se väntande skanningar, tvinga synkronisering eller slå på test-simulering.
+                  </p>
+                </div>
+                {onOpenOfflineQueue && (
+                  <button
+                    onClick={() => {
+                      onClose();
+                      onOpenOfflineQueue();
+                    }}
+                    type="button"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-neutral-950 font-black rounded-lg text-xs transition cursor-pointer shadow-xs whitespace-nowrap"
+                  >
+                    <Clock className="w-4 h-4" />
+                    <span>Öppna Offline-kön</span>
+                  </button>
+                )}
               </div>
             </div>
           )}

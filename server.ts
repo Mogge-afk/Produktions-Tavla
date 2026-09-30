@@ -255,10 +255,14 @@ app.post('/api/import-orders', (req: Request, res: Response) => {
   res.json({ success: true, added, updated, total: currentState.orders.length });
 });
 
-// 7. Core Scanner API: Any handheld scanner, mobile phone, Zebra gun or curl can post here!
-// Format: POST /api/scan with { "scan": "ORD:AO-2026-101:col-montering" } or { "orderId": "AO-2026-101", "stationId": "col-montering" }
-app.post('/api/scan', (req: Request, res: Response) => {
-  let { scan, orderId, stationId, operator, quantity } = req.body;
+function executeScanLogic(body: {
+  scan?: string;
+  orderId?: string;
+  stationId?: string;
+  operator?: string;
+  quantity?: number;
+}): { status: number; data: any } {
+  let { scan, orderId, stationId, operator, quantity } = body;
 
   // Extract from raw scan string if provided
   if (scan && typeof scan === 'string') {
@@ -292,7 +296,7 @@ app.post('/api/scan', (req: Request, res: Response) => {
   }
 
   if (!orderId) {
-    return res.status(400).json({ success: false, error: 'Saknar orderId eller giltig scan-kod' });
+    return { status: 400, data: { success: false, error: 'Saknar orderId eller giltig scan-kod' } };
   }
 
   const cleanOrderId = String(orderId).trim();
@@ -307,16 +311,22 @@ app.post('/api/scan', (req: Request, res: Response) => {
       (o) => o.id.toLowerCase() === cleanOrderId.toLowerCase()
     );
     if (isArchived) {
-      return res.status(200).json({
-        success: false,
-        isArchived: true,
-        message: `Order ${cleanOrderId} är redan slutförd och finns i arkivet.`,
-      });
+      return {
+        status: 200,
+        data: {
+          success: false,
+          isArchived: true,
+          message: `Order ${cleanOrderId} är redan slutförd och finns i arkivet.`,
+        },
+      };
     }
-    return res.status(404).json({
-      success: false,
-      error: `Order ${cleanOrderId} hittades inte på tavlan.`,
-    });
+    return {
+      status: 404,
+      data: {
+        success: false,
+        error: `Order ${cleanOrderId} hittades inte på tavlan.`,
+      },
+    };
   }
 
   const targetOrder = currentState.orders[foundIndex];
@@ -343,12 +353,15 @@ app.post('/api/scan', (req: Request, res: Response) => {
       order: targetOrder,
     });
 
-    return res.json({
-      success: true,
-      isLastStation: true,
-      order: targetOrder,
-      message: `Order ${targetOrder.id} har nått sista stationen ("${fromColumn.title}").`,
-    });
+    return {
+      status: 200,
+      data: {
+        success: true,
+        isLastStation: true,
+        order: targetOrder,
+        message: `Order ${targetOrder.id} har nått sista stationen ("${fromColumn.title}").`,
+      },
+    };
   }
 
   // Update order with new stage, progress, report and note
@@ -401,13 +414,43 @@ app.post('/api/scan', (req: Request, res: Response) => {
     orders: currentState.orders,
   });
 
+  return {
+    status: 200,
+    data: {
+      success: true,
+      orderId: targetOrder.id,
+      from: fromColumn.title,
+      to: nextColumn.title,
+      order: updatedOrder,
+      message: `✓ Order ${targetOrder.id} flyttad från "${fromColumn.title}" till "${nextColumn.title}"!`,
+    },
+  };
+}
+
+// 7. Core Scanner API: Any handheld scanner, mobile phone, Zebra gun or curl can post here!
+// Format: POST /api/scan with { "scan": "ORD:AO-2026-101:col-montering" } or { "orderId": "AO-2026-101", "stationId": "col-montering" }
+app.post('/api/scan', (req: Request, res: Response) => {
+  const result = executeScanLogic(req.body);
+  return res.status(result.status).json(result.data);
+});
+
+// 7b. Batch Scanner API: Used when offline devices reconnect and send all queued scans
+app.post('/api/scan/batch', (req: Request, res: Response) => {
+  const { scans } = req.body;
+  if (!Array.isArray(scans)) {
+    return res.status(400).json({ error: 'scans must be an array' });
+  }
+
+  const results = [];
+  for (const item of scans) {
+    const resItem = executeScanLogic(item);
+    results.push(resItem.data);
+  }
+
   return res.json({
     success: true,
-    orderId: targetOrder.id,
-    from: fromColumn.title,
-    to: nextColumn.title,
-    order: updatedOrder,
-    message: `✓ Order ${targetOrder.id} flyttad från "${fromColumn.title}" till "${nextColumn.title}"!`,
+    total: scans.length,
+    results,
   });
 });
 
