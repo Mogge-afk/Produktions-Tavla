@@ -25,9 +25,12 @@ import { StationModeModal } from './components/StationModeModal';
 import { ExcelImportModal } from './components/ExcelImportModal';
 import { FloorGuideModal } from './components/FloorGuideModal';
 import { ArchiveModal } from './components/ArchiveModal';
+import { MobileScannerView } from './components/MobileScannerView';
+import { HardwareGuideModal } from './components/HardwareGuideModal';
 import { playScanSuccessSound } from './utils/audio';
 import { refreshOrderPriorities, loadPrioritySettings } from './utils/priority';
 import { extractScanPayload, determineNextColumn } from './utils/qr';
+import { apiSync, SyncStatus } from './utils/apiSync';
 import { CheckCircle2, AlertCircle, Zap, Undo2 } from 'lucide-react';
 
 interface ToastState {
@@ -82,8 +85,19 @@ export default function App() {
   const [isStationModeOpen, setIsStationModeOpen] = useState(false);
   const [isExcelImportOpen, setIsExcelImportOpen] = useState(false);
   const [isFloorGuideOpen, setIsFloorGuideOpen] = useState(false);
+  const [isHardwareGuideOpen, setIsHardwareGuideOpen] = useState(false);
   const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
 
+  // Mobile dedicated scanner view on shop floor
+  const [isMobileScannerMode, setIsMobileScannerMode] = useState<boolean>(() => {
+    try {
+      return typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mode') === 'scanner';
+    } catch {
+      return false;
+    }
+  });
+
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('connecting');
   const [recentlyUpdatedOrderId, setRecentlyUpdatedOrderId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<ToastState | null>(null);
   const toastTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -129,7 +143,65 @@ export default function App() {
     });
   }, [showToast]);
 
-  // Subscribe to real-time sync across browser tabs/windows
+  // Connect to Backend API + Server-Sent Events (SSE) for Real-Time Synchronization across TV & Mobiles
+  useEffect(() => {
+    const unsubStatus = apiSync.onStatusChange(setSyncStatus);
+
+    // Initial state hydration from backend server
+    apiSync.fetchState().then((state) => {
+      if (state) {
+        if (state.orders && state.orders.length > 0) {
+          setOrders(state.orders);
+          saveStoredOrders(state.orders);
+        }
+        if (state.columns && state.columns.length > 0) {
+          setColumns(state.columns);
+          saveStoredColumns(state.columns);
+        }
+        if (state.archivedOrders) {
+          setArchivedOrders(state.archivedOrders);
+          saveStoredArchivedOrders(state.archivedOrders);
+        }
+      }
+    });
+
+    // Real-time updates pushed from backend (when someone scans on mobile or external API)
+    const unsubState = apiSync.onStateUpdate((update) => {
+      if (update.orders) {
+        setOrders(update.orders);
+        saveStoredOrders(update.orders);
+      }
+      if (update.columns) {
+        setColumns(update.columns);
+        saveStoredColumns(update.columns);
+      }
+      if (update.archivedOrders) {
+        setArchivedOrders(update.archivedOrders);
+        saveStoredArchivedOrders(update.archivedOrders);
+      }
+    });
+
+    const unsubScan = apiSync.onScanEvent((event) => {
+      if (event.type === 'ORDER_MOVED') {
+        playScanSuccessSound();
+        if (event.orderId) {
+          flashUpdatedCard(event.orderId);
+        }
+        showToast(
+          `✓ ${event.orderId}: Flyttad från "${event.fromStation}" till "${event.toStation}"!`,
+          'success'
+        );
+      }
+    });
+
+    return () => {
+      unsubStatus();
+      unsubState();
+      unsubScan();
+    };
+  }, [showToast]);
+
+  // Subscribe to real-time sync across browser tabs/windows (local storage fallback)
   useEffect(() => {
     const unsubscribe = subscribeToSync(
       (newOrders) => {
@@ -304,6 +376,7 @@ export default function App() {
           return ord;
         });
         saveStoredOrders(next);
+        apiSync.syncOrders(next);
         return next;
       });
 
@@ -787,6 +860,23 @@ export default function App() {
     });
   }, [orders, searchQuery, selectedPriority]);
 
+  if (isMobileScannerMode) {
+    return (
+      <MobileScannerView
+        columns={columns}
+        allOrders={orders}
+        onExitMobileMode={() => {
+          setIsMobileScannerMode(false);
+          try {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('mode');
+            window.history.replaceState({}, document.title, url.pathname);
+          } catch {}
+        }}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-neutral-100 text-neutral-900 font-sans selection:bg-neutral-900 selection:text-white relative">
       
@@ -844,6 +934,7 @@ export default function App() {
         onOpenStationMode={() => setIsStationModeOpen(true)}
         onOpenExcelImport={() => setIsExcelImportOpen(true)}
         onOpenFloorGuide={() => setIsFloorGuideOpen(true)}
+        onOpenHardwareGuide={() => setIsHardwareGuideOpen(true)}
         onOpenArchive={() => setIsArchiveModalOpen(true)}
         onRefreshPriorities={handleRefreshPriorities}
         searchQuery={searchQuery}
@@ -854,6 +945,7 @@ export default function App() {
         archivedOrdersCount={archivedOrders.length}
         autoAdvanceEnabled={autoAdvanceOnScan}
         onToggleAutoAdvance={handleToggleAutoAdvance}
+        syncStatus={syncStatus}
       />
 
       {/* Production KPIs & Quick Actions Bar */}
@@ -985,6 +1077,13 @@ export default function App() {
         columns={columns}
         allOrders={orders}
         onOrderStationReport={handleOrderStationReport}
+      />
+
+      {/* MODAL 11: Floor Hardware & Real-Time API Guide */}
+      <HardwareGuideModal
+        isOpen={isHardwareGuideOpen}
+        onClose={() => setIsHardwareGuideOpen(false)}
+        onOpenMobileMode={() => setIsMobileScannerMode(true)}
       />
     </div>
   );

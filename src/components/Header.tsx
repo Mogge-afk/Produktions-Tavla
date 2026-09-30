@@ -15,7 +15,9 @@ import {
   HelpCircle,
   RefreshCw,
   Archive,
-  Zap
+  Zap,
+  Radio,
+  Smartphone
 } from 'lucide-react';
 import { Priority } from '../types';
 
@@ -27,6 +29,7 @@ interface HeaderProps {
   onOpenStationMode: () => void;
   onOpenExcelImport: () => void;
   onOpenFloorGuide: () => void;
+  onOpenHardwareGuide: () => void;
   onOpenArchive: () => void;
   onRefreshPriorities: () => void;
   searchQuery: string;
@@ -37,6 +40,7 @@ interface HeaderProps {
   archivedOrdersCount: number;
   autoAdvanceEnabled: boolean;
   onToggleAutoAdvance: () => void;
+  syncStatus?: 'connected' | 'connecting' | 'offline';
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -47,6 +51,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenStationMode,
   onOpenExcelImport,
   onOpenFloorGuide,
+  onOpenHardwareGuide,
   onOpenArchive,
   onRefreshPriorities,
   searchQuery,
@@ -57,6 +62,7 @@ export const Header: React.FC<HeaderProps> = ({
   archivedOrdersCount,
   autoAdvanceEnabled,
   onToggleAutoAdvance,
+  syncStatus = 'connected',
 }) => {
   const [currentTime, setCurrentTime] = useState<string>('');
   const [currentDate, setCurrentDate] = useState<string>('');
@@ -100,9 +106,13 @@ export const Header: React.FC<HeaderProps> = ({
                 <h1 className="text-2xl lg:text-3xl font-black tracking-tight text-neutral-900 uppercase font-sans">
                   PLANERINGSTAVLA
                 </h1>
-                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span>Realtid</span>
+                <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-xs font-bold ${
+                  syncStatus === 'connected'
+                    ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                    : 'bg-amber-50 border-amber-300 text-amber-800'
+                }`}>
+                  <span className={`w-2 h-2 rounded-full ${syncStatus === 'connected' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+                  <span>{syncStatus === 'connected' ? 'Realtid' : 'Ansluter...'}</span>
                 </div>
               </div>
               <p className="text-xs text-neutral-500 font-medium mt-0.5">
@@ -217,6 +227,17 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <Tv className="w-4 h-4 text-amber-700" />
               <span className="hidden md:inline">Golvguide</span>
+            </button>
+
+            {/* Floor Hardware & API Guide */}
+            <button
+              onClick={onOpenHardwareGuide}
+              type="button"
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 rounded-lg text-sm font-semibold transition cursor-pointer shadow-xs"
+              title="Koppla mobiltelefon som trådlös golvskanner, se hårdvarurekommendationer och REST API"
+            >
+              <Radio className="w-4 h-4 text-purple-600" />
+              <span className="hidden md:inline">Golvskanner & API</span>
             </button>
 
             {/* Archive / Completed Orders */}

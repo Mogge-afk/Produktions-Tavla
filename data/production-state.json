@@ -1,0 +1,159 @@
+{
+  "orders": [
+    {
+      "id": "AO-2026-101",
+      "title": "Hydraulventilblock HVB-420",
+      "articleNumber": "ART-99201",
+      "customer": "Nordic Hydraulic AB",
+      "batchSize": 100,
+      "unit": "st",
+      "priority": "high",
+      "columnId": "col-test",
+      "targetDate": "2026-10-02",
+      "drawingNumber": "RIT-4421-C",
+      "createdAt": "2026-09-29T10:03:40.557Z",
+      "updatedAt": "2026-09-30T10:03:53.695Z",
+      "operator": "Kalle.K",
+      "tags": [
+        "CNC-fräst",
+        "Härdat stål"
+      ],
+      "reports": [
+        {
+          "id": "rep_1790762633695",
+          "timestamp": "2026-09-30T10:03:53.695Z",
+          "stationId": "col-montering",
+          "stationName": "Montering",
+          "operator": "Operatör (Golvskanner)",
+          "quantity": 100,
+          "totalSoFar": 100,
+          "orderTotal": 100,
+          "note": "Skannad och flyttad via realtids-API"
+        }
+      ],
+      "stationProgress": {
+        "col-material": 100,
+        "col-montering": 100
+      },
+      "notes": [
+        {
+          "id": "n_scan_1790762633695",
+          "timestamp": "2026-09-30T10:03:53.695Z",
+          "operator": "Operatör (Golvskanner)",
+          "text": "Skannad vid \"Montering\" ➔ automatiskt flyttad till \"Test\".",
+          "type": "stage_change",
+          "stageName": "Test"
+        },
+        {
+          "id": "n1",
+          "timestamp": "2026-09-30T10:03:40.557Z",
+          "operator": "System",
+          "text": "Order skapad",
+          "type": "info",
+          "stageName": "Montering"
+        }
+      ],
+      "checklists": {}
+    },
+    {
+      "id": "AO-2026-102",
+      "title": "Styrskåp Automatiseringslina Alpha",
+      "articleNumber": "EL-4011-B",
+      "customer": "Scania Powertrain",
+      "batchSize": 20,
+      "unit": "st",
+      "priority": "urgent",
+      "columnId": "col-test",
+      "targetDate": "2026-10-01",
+      "drawingNumber": "EL-9081",
+      "createdAt": "2026-09-28T10:03:40.557Z",
+      "updatedAt": "2026-09-30T10:03:40.557Z",
+      "operator": "Mikael.L",
+      "tags": [
+        "PLC-styrning",
+        "24V"
+      ],
+      "reports": [],
+      "stationProgress": {
+        "col-material": 20,
+        "col-montering": 20,
+        "col-test": 5
+      },
+      "notes": [],
+      "checklists": {}
+    },
+    {
+      "id": "AO-2026-103",
+      "title": "Axeltätning och Monteringsfläns",
+      "articleNumber": "FL-0029",
+      "customer": "Volvo GTO",
+      "batchSize": 250,
+      "unit": "st",
+      "priority": "normal",
+      "columnId": "col-planerat",
+      "targetDate": "2026-10-15",
+      "createdAt": "2026-09-30T10:03:40.557Z",
+      "updatedAt": "2026-09-30T10:03:40.557Z",
+      "operator": "Kalle.K",
+      "tags": [
+        "Standard"
+      ],
+      "reports": [],
+      "stationProgress": {},
+      "notes": [],
+      "checklists": {}
+    }
+  ],
+  "columns": [
+    {
+      "id": "col-planerat",
+      "title": "Planerat",
+      "headerBg": "#dbeafe",
+      "borderColor": "#93c5fd",
+      "headerTextColor": "#1e3a8a",
+      "description": "Ordinarie order inlagd och väntar på produktionsstart"
+    },
+    {
+      "id": "col-material",
+      "title": "Material uttaget",
+      "headerBg": "#dcfce7",
+      "borderColor": "#86efac",
+      "headerTextColor": "#14532d",
+      "description": "Råmaterial och komponenter plockade från lagret"
+    },
+    {
+      "id": "col-montering",
+      "title": "Montering",
+      "headerBg": "#fef3c7",
+      "borderColor": "#fde047",
+      "headerTextColor": "#713f12",
+      "description": "Aktiv montering och mekanisk/elektrisk sammanställning"
+    },
+    {
+      "id": "col-test",
+      "title": "Test",
+      "headerBg": "#f3e8ff",
+      "borderColor": "#d8b4fe",
+      "headerTextColor": "#581c87",
+      "description": "Kvalitetstest, provtryckning, mätning och funktionsverifiering"
+    },
+    {
+      "id": "col-packning",
+      "title": "Packning",
+      "headerBg": "#fce7f3",
+      "borderColor": "#f9a8d4",
+      "headerTextColor": "#831843",
+      "description": "Slutrengöring, märkning och emballering"
+    },
+    {
+      "id": "col-leverans",
+      "title": "Klar för leverans",
+      "headerBg": "#dcfce7",
+      "borderColor": "#86efac",
+      "headerTextColor": "#14532d",
+      "description": "Färdigställt gods uppställt på leveranstorg"
+    }
+  ],
+  "archivedOrders": [],
+  "lastUpdated": "2026-09-30T10:03:53.695Z"
+}
