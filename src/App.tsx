@@ -499,6 +499,7 @@ export default function App() {
   // Global Handheld Barcode / QR Scanner Listener (Wedge mode)
   const scannerBuffer = useRef<string>('');
   const lastKeyTime = useRef<number>(0);
+  const lastScanExecutedTime = useRef<number>(0);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -519,6 +520,11 @@ export default function App() {
         scannerBuffer.current = '';
 
         if (scannedText.length >= 2) {
+          if (now - lastScanExecutedTime.current < 1200) {
+            return;
+          }
+          lastScanExecutedTime.current = now;
+
           const decoded = extractScanPayload(scannedText);
           if (decoded.orderId) {
             const found = orders.find(
@@ -526,15 +532,9 @@ export default function App() {
             );
             if (found) {
               e.preventDefault();
-              if (autoAdvanceOnScan || decoded.autoAdvance) {
-                handleAutoAdvanceOrder(found, decoded.stationId);
-              } else {
-                setScannedOrder(found);
-                setScannedTargetStationId(decoded.stationId);
-                setIsQuickUpdateOpen(true);
-                playScanSuccessSound();
-                flashUpdatedCard(found.id);
-              }
+              setIsScannerOpen(false);
+              setIsQuickUpdateOpen(false);
+              handleAutoAdvanceOrder(found, decoded.stationId);
             } else {
               const inArchive = archivedOrders.find((o) => o.id.toLowerCase() === decoded.orderId.toLowerCase());
               if (inArchive) {
@@ -627,7 +627,7 @@ export default function App() {
     showToast(`Order ${newOrder.id} skapades och lades till på tavlan.`);
   };
 
-  // Import batch of orders from Excel / IFS
+  // Import batch of orders from Excel / ERP-system
   const handleImportOrders = (
     importedOrders: ProductionOrder[],
     targetColumnId: string,
@@ -656,14 +656,14 @@ export default function App() {
               batchSize: imp.batchSize || existing.batchSize,
               targetDate: imp.targetDate || existing.targetDate,
               priority: imp.priority || existing.priority,
-              customer: imp.customer !== 'IFS Order' ? imp.customer : existing.customer,
+              customer: imp.customer !== 'ERP Order' && imp.customer !== 'Monitor Order' && imp.customer !== 'IFS Order' ? imp.customer : existing.customer,
               drawingNumber: imp.drawingNumber || existing.drawingNumber,
               updatedAt: new Date().toISOString(),
               notes: [
                 {
                   id: 'n_upd_' + Date.now(),
                   timestamp: new Date().toISOString(),
-                  operator: 'IFS Import',
+                  operator: 'ERP Import',
                   text: `Uppdaterad från Excel. Nytt leveransdatum: ${imp.targetDate}, Antal: ${imp.batchSize} ${existing.unit}. Prioritet: ${imp.priority}.`,
                   type: 'info',
                   stageName: destCol?.title,
@@ -742,21 +742,13 @@ export default function App() {
   // Handler when QR code is scanned (with station binding & auto-advance!)
   const handleOrderIdentified = (orderId: string, stationId?: string, forceAuto?: boolean) => {
     setIsScannerOpen(false);
+    setIsQuickUpdateOpen(false);
     const found = orders.find(
       (o) => o.id.toLowerCase() === orderId.toLowerCase()
     );
 
     if (found) {
-      const shouldAuto = forceAuto !== undefined ? forceAuto : autoAdvanceOnScan;
-      if (shouldAuto) {
-        handleAutoAdvanceOrder(found, stationId);
-      } else {
-        setScannedOrder(found);
-        setScannedTargetStationId(stationId);
-        setIsQuickUpdateOpen(true);
-        playScanSuccessSound();
-        flashUpdatedCard(found.id);
-      }
+      handleAutoAdvanceOrder(found, stationId);
     } else {
       // Check if it was archived
       const inArchive = archivedOrders.find((o) => o.id.toLowerCase() === orderId.toLowerCase());
@@ -1051,7 +1043,7 @@ export default function App() {
         onPermanentlyDeleteOrder={handlePermanentlyDeleteArchivedOrder}
       />
 
-      {/* MODAL 2: Excel / IFS Import */}
+      {/* MODAL 2: Excel / ERP-system Import */}
       <ExcelImportModal
         isOpen={isExcelImportOpen}
         onClose={() => setIsExcelImportOpen(false)}

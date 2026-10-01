@@ -48,6 +48,8 @@ export const MobileScannerView: React.FC<MobileScannerViewProps> = ({
   // Last scan feedback
   const [lastScanResult, setLastScanResult] = useState<ScanApiResponse | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const lastScannedTimeRef = useRef<number>(0);
+  const lastScannedStringRef = useRef<string>('');
 
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const scannerContainerId = 'mobile-live-reader';
@@ -117,6 +119,14 @@ export const MobileScannerView: React.FC<MobileScannerViewProps> = ({
 
   const handleScanPayload = async (rawString: string) => {
     if (isSubmitting) return;
+
+    const now = Date.now();
+    if (rawString === lastScannedStringRef.current && now - lastScannedTimeRef.current < 2500) {
+      return;
+    }
+    lastScannedTimeRef.current = now;
+    lastScannedStringRef.current = rawString;
+
     setIsSubmitting(true);
 
     // Haptic vibration feedback on phones

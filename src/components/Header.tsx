@@ -163,15 +163,15 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Action Buttons */}
           <div className="flex flex-wrap items-center gap-2">
             
-            {/* Excel Import Button - High visibility */}
+            {/* Excel / ERP-system Import Button - High visibility */}
             <button
               onClick={onOpenExcelImport}
               type="button"
               className="inline-flex items-center gap-2 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-bold shadow-xs transition active:scale-95 cursor-pointer ring-2 ring-emerald-500/30"
-              title="Importera tillverkningsordrar från IFS Excel/CSV direkt till Planerat"
+              title="Importera tillverkningsordrar från ERP-system / Excel direkt till Planerat"
             >
               <FileSpreadsheet className="w-4 h-4 text-emerald-100" />
-              <span>Importera Excel / IFS</span>
+              <span>Importera Excel / ERP</span>
             </button>
 
             {/* Primary Action: QR Scanner */}

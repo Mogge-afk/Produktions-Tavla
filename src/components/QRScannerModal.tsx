@@ -44,6 +44,14 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const scannerContainerId = 'interactive-qr-reader';
+  const isProcessingScanRef = useRef(false);
+
+  // Reset scan latch whenever modal opens
+  useEffect(() => {
+    if (isOpen) {
+      isProcessingScanRef.current = false;
+    }
+  }, [isOpen]);
 
   // Start Camera Scanner when camera tab is active
   useEffect(() => {
@@ -71,10 +79,15 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
             aspectRatio: 1.0,
           },
           (decodedText) => {
+            // Guard: Only scan once, stop scanner, close window, and move to next step!
+            if (isProcessingScanRef.current) return;
+            isProcessingScanRef.current = true;
+
             playScanSuccessSound();
-            const { orderId, stationId, autoAdvance } = extractScanPayload(decodedText);
+            const { orderId, stationId } = extractScanPayload(decodedText);
             stopCamera();
-            onOrderIdentified(orderId, stationId, autoAdvanceEnabled || autoAdvance);
+            onClose(); // Stäng rutan omedelbart
+            onOrderIdentified(orderId, stationId, true); // Flytta direkt till nästa steg!
           },
           () => {
             // ignore scan frame misses
@@ -120,17 +133,25 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
 
   const handleManualSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    const { orderId, stationId, autoAdvance } = extractScanPayload(manualInput);
+    if (isProcessingScanRef.current) return;
+    const { orderId, stationId } = extractScanPayload(manualInput);
     if (!orderId) return;
 
+    isProcessingScanRef.current = true;
     playScanSuccessSound();
-    onOrderIdentified(orderId, stationId, autoAdvanceEnabled || autoAdvance);
+    stopCamera();
+    onClose();
+    onOrderIdentified(orderId, stationId, true);
     setManualInput('');
   };
 
   const handleSimulatorSelect = (orderId: string, stationId?: string) => {
+    if (isProcessingScanRef.current) return;
+    isProcessingScanRef.current = true;
     playScanSuccessSound();
-    onOrderIdentified(orderId, stationId, autoAdvanceEnabled);
+    stopCamera();
+    onClose();
+    onOrderIdentified(orderId, stationId, true);
   };
 
   const filteredOrders = allOrders.filter(

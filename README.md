@@ -2,7 +2,7 @@
 
 En modern, digital planeringstavla för tillverkande industri och mekaniska/elektroniska verkstäder. Byggd som en full-stack-applikation med **React 19**, **TypeScript**, **Tailwind CSS**, **Express.js**, **Server-Sent Events (SSE)** och **Vite**.
 
-Systemet ersätter analoga whiteboards och magnetremsor med en interaktiv tavla på TV-skärm, automatisk import från **IFS Applications / Excel**, utskrift av **följesedlar med QR-koder**, samt **realtidsflytt mellan stationer** när operatörer skannar på golvet – med fullt **Offline-skydd om nätverket skulle gå ner**.
+Systemet ersätter analoga whiteboards och magnetremsor med en interaktiv tavla på TV-skärm, automatisk import från **ERP-system / Excel**, utskrift av **följesedlar med QR-koder**, samt **realtidsflytt mellan stationer** när operatörer skannar på golvet – med fullt **Offline-skydd om nätverket skulle gå ner**.
 
 ---
 
@@ -13,7 +13,7 @@ Systemet ersätter analoga whiteboards och magnetremsor med en interaktiv tavla 
 3. [Skanning på Golvet: Bluetooth vs 2.4 GHz vs Mobil](#-skanning-på-golvet-bluetooth-vs-24-ghz-vs-mobil)
 4. [Offline-kö & Hantering av Nätverksbortfall](#-offline-kö--hantering-av-nätverksbortfall)
 5. [Utskrift av Följesedlar & QR-koder](#-utskrift-av-följesedlar--qr-koder)
-6. [Import från IFS Applications (Excel & CSV)](#-import-från-ifs-applications-excel--csv)
+6. [Import från ERP-system (Excel & CSV)](#-import-från-erp-system-excel--csv)
 7. [REST API & Webhooks Dokumentation](#-rest-api--webhooks-dokumentation)
 8. [Installation & Driftsättning](#-installation--driftsättning)
 9. [Projektstruktur](#-projektstruktur)
@@ -24,7 +24,7 @@ Systemet ersätter analoga whiteboards och magnetremsor med en interaktiv tavla 
 ## 🌟 Systemöversikt & Arbetsflöde
 
 ```
-          [ IFS Applications / ERP-system ]
+                 [ ERP-System ]
                          │
                          ▼ (Excel / CSV export med tillverkningsordrar)
               ┌─────────────────────┐
@@ -38,7 +38,7 @@ Systemet ersätter analoga whiteboards och magnetremsor med en interaktiv tavla 
                          │
         Operatören skannar QR vid avslutad operation
          (Mobilkamera / 2.4GHz handskanner / Zebra)
-                         │
+                         │ (Skannas 1 gång ➔ fönstret stängs ➔ ordern flyttas!)
                          ▼
         ┌────────────────────────────────┐
         │  Har enheten nätverkskontakt?  │
@@ -162,23 +162,24 @@ Systemet innehåller en dedikerad generator för **A4 Följesedlar (Job Traveler
 
 ---
 
-## 📊 Import från IFS Applications (Excel & CSV)
+## 📊 Import från ERP-system (Excel & CSV)
 
-Det är enkelt att få in tillverkningsordrar från företagets affärssystem (t.ex. IFS Applications, Monitor ERP eller SAP):
+Det är enkelt att få in tillverkningsordrar från företagets ERP-system:
 
-1. Klicka på **”Importera Excel / IFS”** i toppmenyn.
-2. Dra in din `.xlsx`-, `.xls`- eller `.csv`-fil.
-3. Systemet känner automatiskt igen vanliga IFS-fältnamn:
-   - **Ordernummer**: `ORDER_NO`, `Ordernr`, `Order ID`, `Tillverkningsorder`
-   - **Artikelnummer**: `PART_NO`, `Artikelnr`, `Artikel`
-   - **Artikelnamn**: `PART_DESCRIPTION`, `Benämning`, `Beskrivning`
-   - **Antal**: `QTY_COMPLETE`, `Antal`, `Batch`, `Kvantitet`
-   - **Planerat Leveransdatum**: `PLANNED_DUE_DATE`, `Leveransdatum`, `Klardatum`
-   - **Kund / Projekt**: `CUSTOMER_NAME`, `Kund`, `Mottagare`
+1. Klicka på **”Importera Excel / ERP”** i toppmenyn.
+2. Dra in din exporterade `.xlsx`-, `.xls`- eller `.csv`-fil från ert affärssystem (t.ex. listan *Tillverkningsordrar* eller *Tillverkningsorderförteckning*).
+3. Systemet känner automatiskt igen standardkolumner från ERP-system och affärssystem:
+   - **Ordernummer**: `Ordernr`, `Order ID`, `Tillverkningsorder`, `ORDER_NO`, `Tillvorder`
+   - **Artikelnummer**: `Artikelnr`, `Artikelnummer`, `PART_NO`, `Artikel`, `Materialnr`
+   - **Artikelnamn / Benämning**: `Benämning`, `Artikelbenämning`, `PART_DESCRIPTION`, `Beskrivning`
+   - **Antal**: `Antal`, `Orderantal`, `QTY_COMPLETE`, `Kvantitet`, `Batch`
+   - **Planerat Leveransdatum**: `Leveransdatum`, `Klardatum`, `Färdigdatum`, `PLANNED_DUE_DATE`
+   - **Kund / Projekt**: `Kund`, `Kundnamn`, `CUSTOMER_NAME`, `Mottagare`
+   - **Ritningsnummer**: `Ritningsnummer`, `Ritningsnr`, `Drawing_No`
 4. Välj måldestination (standard är kolumnen *Planerat*) samt dubletthantering:
-   - **Uppdatera befintliga**: Om ordern redan finns uppdateras datum och antal utan att förlora historik.
+   - **Uppdatera befintliga**: Om ordern redan finns uppdateras datum, antal och status utan att förlora historik eller loggar.
    - **Hoppa över befintliga**: Lägger endast till nya ordrar.
-5. Inbyggd knapp för att ladda ner en färdig testfil i Excel-format finns i dialogen.
+5. Inbyggd knapp för att ladda ner en färdig testfil i Excel-format (**"Ladda ner ERP / Excel-exempelfil"**) finns i dialogen.
 
 ---
 
@@ -345,7 +346,7 @@ google-chrome --kiosk --noerrdialogs --disable-infobars http://localhost:3000
 │   │   ├── MobileScannerView.tsx   # Mobilanpassad golvskanner för telefoner med offline-stöd
 │   │   ├── OfflineQueueModal.tsx   # Modal för att hantera och synka väntande offline-skanningar
 │   │   ├── HardwareGuideModal.tsx  # Guide för skannrar, mobilkoppling, offline-drift och REST API
-│   │   ├── ExcelImportModal.tsx    # Excel/IFS import med automatisk kolumnigenkänning
+│   │   ├── ExcelImportModal.tsx    # Excel- och ERP-system import med automatisk kolumnigenkänning
 │   │   ├── PrintLabelsModal.tsx    # Dialog för A4-följesedlar och klisteretiketter (utan @-tecken)
 │   │   ├── QuickUpdateModal.tsx    # Manuell avrapportering vid skanning
 │   │   ├── OrderDetailModal.tsx    # Detaljvy för orderhistorik, ritningar och rapporter
@@ -359,7 +360,7 @@ google-chrome --kiosk --noerrdialogs --disable-infobars http://localhost:3000
 │       ├── offlineQueue.ts         # Offline-first köhanterare med LocalStorage och auto-synk
 │       ├── apiSync.ts              # Klient för realtids-SSE och REST API anrop
 │       ├── audio.ts                # Industriella ljudpip via Web Audio API
-│       ├── excelParser.ts          # Parser för IFS Applications och Excel (.xlsx/.csv)
+│       ├── excelParser.ts          # Parser för ERP-system / Excel (.xlsx/.csv)
 │       ├── priority.ts             # Automatisk prioritetsberäkning utifrån leveransdatum
 │       ├── printDocument.ts        # HTML/CSS-generator för A4 följesedlar
 │       ├── qr.ts                   # QR-kodgenerering och payload-tolkning

@@ -64,7 +64,7 @@ export const HardwareGuideModal: React.FC<HardwareGuideModalProps> = ({
 
   const pythonExample = `import requests
 
-# Exempel: Körs från Raspberry Pi, automatisk streckkodsläsare eller IFS-integration
+# Exempel: Körs från Raspberry Pi, automatisk streckkodsläsare eller ERP-system-integration
 url = "${currentOrigin}/api/scan"
 payload = {
     "scan": "ORD:AO-2026-101:col-montering",

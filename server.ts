@@ -212,7 +212,7 @@ app.post('/api/archived', (req: Request, res: Response) => {
   res.json({ success: true, count: archivedOrders.length });
 });
 
-// 6. Bulk import from IFS / Excel
+// 6. Bulk import from ERP-system / Excel
 app.post('/api/import-orders', (req: Request, res: Response) => {
   const { importedOrders, targetColumnId, duplicateStrategy } = req.body;
   if (!Array.isArray(importedOrders)) {
@@ -237,7 +237,7 @@ app.post('/api/import-orders', (req: Request, res: Response) => {
           batchSize: imp.batchSize || existing.batchSize,
           targetDate: imp.targetDate || existing.targetDate,
           priority: imp.priority || existing.priority,
-          customer: imp.customer !== 'IFS Order' ? imp.customer : existing.customer,
+          customer: imp.customer !== 'ERP Order' && imp.customer !== 'Monitor Order' && imp.customer !== 'IFS Order' ? imp.customer : existing.customer,
           updatedAt: new Date().toISOString(),
         };
         existingMap.set(idUpper, merged);

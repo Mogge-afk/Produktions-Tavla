@@ -37,7 +37,7 @@ export interface ParseResult {
 }
 
 /**
- * Intelligent heuristic to identify IFS and standard Swedish/English column headers
+ * Intelligent heuristic to identify ERP-system and standard Swedish/English column headers
  */
 export function guessColumnMapping(headers: string[]): ColumnMapping {
   const findMatch = (candidates: string[]): string => {
@@ -321,7 +321,7 @@ export function processRowsWithMapping(
     // Extract Customer
     const customer = mapping.customer && raw[mapping.customer]
       ? String(raw[mapping.customer]).trim()
-      : 'IFS Tillverkning';
+      : 'ERP Tillverkning';
 
     // Extract Unit
     const unit = mapping.unit && raw[mapping.unit]
@@ -355,9 +355,9 @@ export function processRowsWithMapping(
 }
 
 /**
- * Generate sample IFS Excel file for immediate testing and download
+ * Generate sample ERP-system / Excel file for immediate testing and download
  */
-export function downloadSampleIFSExcel() {
+export function downloadSampleERPExcel() {
   const sampleData = [
     {
       'Ordernr': 'AO-2026-201',
@@ -413,7 +413,11 @@ export function downloadSampleIFSExcel() {
 
   const worksheet = XLSX.utils.json_to_sheet(sampleData);
   const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'IFS_Tillverkningsordrar');
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'ERP_Tillverkningsordrar');
 
-  XLSX.writeFile(workbook, 'IFS_Export_Exempel_Ordrar.xlsx');
+  XLSX.writeFile(workbook, 'ERP_Tillverkningsordrar_Exempel.xlsx');
 }
+
+// Aliases for compatibility
+export const downloadSampleMonitorExcel = downloadSampleERPExcel;
+export const downloadSampleIFSExcel = downloadSampleERPExcel;

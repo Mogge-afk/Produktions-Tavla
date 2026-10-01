@@ -56,7 +56,7 @@ export const ArchiveModal: React.FC<ArchiveModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Export all or filtered archived orders to Excel for IFS accounting
+  // Export all or filtered archived orders to Excel for ERP-system accounting
   const handleExportExcel = () => {
     if (archivedOrders.length === 0) return;
 

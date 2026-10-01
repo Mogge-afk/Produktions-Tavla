@@ -21,7 +21,7 @@ import {
   processRowsWithMapping, 
   ColumnMapping, 
   ParsedRow, 
-  downloadSampleIFSExcel 
+  downloadSampleERPExcel 
 } from '../utils/excelParser';
 import { 
   loadPrioritySettings, 
@@ -170,7 +170,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
         id: row.orderId.toUpperCase(),
         title: row.title,
         articleNumber: row.articleNumber || `ART-${Math.floor(10000 + Math.random() * 90000)}`,
-        customer: row.customer || 'IFS Order',
+        customer: row.customer || 'ERP Order',
         batchSize: row.batchSize,
         unit: row.unit || 'st',
         priority: row.priority,
@@ -179,13 +179,13 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
         drawingNumber: row.drawingNumber,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        operator: 'IFS Importerad',
+        operator: 'ERP Importerad',
         notes: [
           {
             id: 'n_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
             timestamp: new Date().toISOString(),
-            operator: 'IFS Import',
-            text: `Importerad från Excel (${fileName || 'IFS-fil'}). Planerat leveransdatum: ${row.targetDate}.`,
+            operator: 'ERP Import',
+            text: `Importerad från Excel (${fileName || 'ERP-fil'}). Planerat leveransdatum: ${row.targetDate}.`,
             type: 'info',
             stageName: columns.find((c) => c.id === targetColumnId)?.title || 'Planerat',
           },
@@ -193,7 +193,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
         reports: [],
         stationProgress: {},
         checklists: {},
-        tags: ['IFS'],
+        tags: ['ERP'],
         qrPayload: row.orderId.toUpperCase(),
       };
     });
@@ -218,14 +218,14 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-lg font-black tracking-tight uppercase font-sans">
-                  Importera Ordrar från Excel / IFS
+                  Importera Ordrar från Excel / ERP-system
                 </h2>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-900/60 text-emerald-300 border border-emerald-700">
-                  IFS Kompatibel
+                  ERP-system Kompatibel
                 </span>
               </div>
               <p className="text-xs text-neutral-400 mt-0.5">
-                Läs in tillverkningsordrar direkt från IFS-exportfil (.xlsx, .xls, .csv) till tavlan
+                Läs in tillverkningsordrar direkt från affärs- och ERP-system (.xlsx, .xls, .csv) till tavlan
               </p>
             </div>
           </div>
@@ -262,7 +262,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                 Klicka eller dra din Excel-fil hit
               </h3>
               <p className="text-xs text-neutral-500 mt-1 max-w-md mx-auto">
-                Stöder <strong className="text-neutral-700">IFS Applications-rapporter</strong>, standard 
+                Stöder <strong className="text-neutral-700">ERP-system</strong>, affärssystem, standard 
                 <strong className="text-neutral-700"> .xlsx, .xls</strong> och <strong className="text-neutral-700">.csv</strong>. 
                 Alla fält identifieras automatiskt.
               </p>
@@ -272,12 +272,12 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    downloadSampleIFSExcel();
+                    downloadSampleERPExcel();
                   }}
                   className="inline-flex items-center gap-2 px-3.5 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 border border-neutral-300 rounded-lg text-xs font-bold transition"
                 >
                   <Download className="w-3.5 h-3.5 text-neutral-600" />
-                  <span>Ladda ner IFS-exempelfil (.xlsx)</span>
+                  <span>Ladda ner ERP / Excel-exempelfil (.xlsx)</span>
                 </button>
               </div>
 
@@ -326,18 +326,18 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-200 pb-3">
                   <div>
                     <h3 className="text-sm font-black text-neutral-900 uppercase tracking-tight flex items-center gap-2">
-                      <span>1. Kolumnkoppling från IFS</span>
+                      <span>1. Kolumnkoppling från ERP-system / Excel</span>
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
                         Auto-matchad
                       </span>
                     </h3>
                     <p className="text-xs text-neutral-500 mt-0.5">
-                      Kontrollera att IFS-kolumnerna matchar rätt fält (Ordernr, Artikelnamn, Artikelnummer, Antal, Leveransdatum)
+                      Kontrollera att kolumnerna matchar rätt fält (Ordernr, Artikelnamn, Artikelnummer, Antal, Leveransdatum)
                     </p>
                   </div>
                   <button
                     type="button"
-                    onClick={() => downloadSampleIFSExcel()}
+                    onClick={() => downloadSampleERPExcel()}
                     className="text-xs font-semibold text-sky-700 hover:text-sky-900 flex items-center gap-1 cursor-pointer"
                   >
                     <Download className="w-3.5 h-3.5" />

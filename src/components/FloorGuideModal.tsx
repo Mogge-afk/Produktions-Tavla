@@ -54,7 +54,7 @@ export const FloorGuideModal: React.FC<FloorGuideModalProps> = ({
                 Guide: Så fungerar flödet på verkstadsgolvet
               </h2>
               <p className="text-xs text-neutral-400 mt-0.5">
-                Hur IFS, planeringstavlan på TV-skärmen, QR-etiketter och externa skannrar kopplas samman
+                Hur affärs- och ERP-system, planeringstavlan på TV-skärmen, QR-etiketter och skannrar kopplas samman
               </p>
             </div>
           </div>
@@ -83,10 +83,10 @@ export const FloorGuideModal: React.FC<FloorGuideModalProps> = ({
                 </div>
                 <h4 className="font-bold text-neutral-950 text-sm mb-1 flex items-center gap-1.5">
                   <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                  <span>IFS &rarr; Planerat</span>
+                  <span>ERP &rarr; Planerat</span>
                 </h4>
                 <p className="text-xs text-neutral-600 leading-relaxed">
-                  Ta ut din orderfil från IFS (Excel eller CSV) och klicka på <strong>"Importera Excel"</strong>. Alla ordrar läggs direkt i kolumnen <strong>"Planerat"</strong> med automatisk prioritet utifrån måldatum.
+                  Ta ut din orderfil från ert ERP-system (Excel eller CSV) och klicka på <strong>"Importera Excel / ERP"</strong>. Alla ordrar läggs direkt i kolumnen <strong>"Planerat"</strong> med automatisk prioritet utifrån måldatum.
                 </p>
               </div>
 
