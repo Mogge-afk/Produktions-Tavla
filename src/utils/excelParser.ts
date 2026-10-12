@@ -4,6 +4,8 @@ import { calculatePriorityFromDate, PrioritySettings, DEFAULT_PRIORITY_SETTINGS 
 
 export interface ColumnMapping {
   orderId: string;
+  subOrder1?: string; // Släppnr / Release (IFS)
+  subOrder2?: string; // Sekvensnr / Radnr (IFS)
   title: string;
   articleNumber: string;
   batchSize: string;
@@ -40,101 +42,281 @@ export interface ParseResult {
  * Intelligent heuristic to identify ERP-system and standard Swedish/English column headers
  */
 export function guessColumnMapping(headers: string[]): ColumnMapping {
-  const findMatch = (candidates: string[]): string => {
-    const lowerCandidates = candidates.map((c) => c.toLowerCase());
-    for (const h of headers) {
-      const cleanH = h.trim().toLowerCase().replace(/[_\-\s\.]/g, '');
-      for (const cand of lowerCandidates) {
-        const cleanCand = cand.replace(/[_\-\s\.]/g, '');
-        if (cleanH === cleanCand || cleanH.includes(cleanCand)) {
-          return h;
-        }
+  // 1. Check if user previously mapped these columns successfully
+  let savedMapping: Partial<ColumnMapping> = {};
+  if (typeof window !== 'undefined') {
+    try {
+      const saved = localStorage.getItem('planeringstavla_erp_column_mapping');
+      if (saved) savedMapping = JSON.parse(saved);
+    } catch {}
+  }
+
+  const clean = (s: string) => s.trim().toLowerCase().replace(/[_\-\s\.\/\\:]/g, '');
+
+  const findMatch = (candidates: string[], blacklist: string[] = []): string => {
+    const cleanHeaders = headers.map((h) => ({ original: h, cleaned: clean(h) }));
+    const cleanCandidates = candidates.map((c) => clean(c));
+    const cleanBlacklist = blacklist.map((b) => clean(b));
+
+    const isBlacklisted = (cleanH: string) => {
+      return cleanBlacklist.some((b) => b && cleanH.includes(b));
+    };
+
+    // Tier 1: Exact matches (highest confidence)
+    for (const cand of cleanCandidates) {
+      const found = cleanHeaders.find((h) => h.cleaned === cand && !isBlacklisted(h.cleaned));
+      if (found) return found.original;
+    }
+
+    // Tier 2: Prefix matches (e.g. "ordernr_1" or "benamning_swe")
+    for (const cand of cleanCandidates) {
+      if (cand.length >= 3) {
+        const found = cleanHeaders.find((h) => h.cleaned.startsWith(cand) && !isBlacklisted(h.cleaned));
+        if (found) return found.original;
       }
     }
+
+    // Tier 3: Substring matches (only for words of length >= 4)
+    for (const cand of cleanCandidates) {
+      if (cand.length >= 4) {
+        const found = cleanHeaders.find((h) => h.cleaned.includes(cand) && !isBlacklisted(h.cleaned));
+        if (found) return found.original;
+      }
+    }
+
     return '';
   };
 
-  const orderId = findMatch([
-    'ordernr',
-    'ordernummer',
-    'tillverkningsorder',
-    'shoporder',
-    'doporder',
-    'orderno',
-    'tillvorder',
-    'order',
-    'ao',
-    'id',
-  ]) || headers[0] || '';
+  const orderId =
+    (savedMapping.orderId && headers.includes(savedMapping.orderId) ? savedMapping.orderId : '') ||
+    findMatch(
+      [
+        'ordernr',
+        'ordernummer',
+        'order no',
+        'tillverkningsorder',
+        'tillverkningsnr',
+        'tillvorder',
+        'shop order',
+        'shop order no',
+        'shoporder',
+        'shoporderno',
+        'produktionsorder',
+        'p order',
+        'porder',
+        'prodnr',
+        'dop order',
+        'doporder',
+        'orderno',
+        'order',
+      ],
+      ['kund', 'customer', 'antal', 'qty', 'datum', 'date', 'artik', 'part', 'beskriv', 'släpp', 'slapp', 'rad', 'lev', 'sekv']
+    ) ||
+    headers[0] ||
+    '';
 
-  const title = findMatch([
-    'artikelnamn',
-    'benämning',
-    'beskrivning',
-    'produktnamn',
-    'produkt',
-    'partdescription',
-    'description',
-    'title',
-    'benamning',
-  ]) || headers[1] || '';
+  const subOrder1 =
+    (savedMapping.subOrder1 && headers.includes(savedMapping.subOrder1) ? savedMapping.subOrder1 : '') ||
+    findMatch(
+      [
+        'släppnr',
+        'slappnr',
+        'släpp nr',
+        'slapp nr',
+        'släpp',
+        'slapp',
+        'release no',
+        'releaseno',
+        'release',
+        'rel nr',
+        'relnr',
+        'rel',
+        'radnr',
+        'rad nr',
+        'rad',
+        'linjenr',
+        'linje nr',
+        'line no',
+        'avropsnr',
+        'avrop nr',
+        'avrop',
+      ],
+      ['sekv', 'lev', 'datum', 'kund', 'antal', 'order']
+    );
 
-  const articleNumber = findMatch([
-    'artikelnummer',
-    'artikelnr',
-    'artnr',
-    'partno',
-    'partnumber',
-    'materialnr',
-    'material',
-    'art.nr',
-    'itemno',
-  ]) || headers[2] || '';
+  const subOrder2 =
+    (savedMapping.subOrder2 && headers.includes(savedMapping.subOrder2) ? savedMapping.subOrder2 : '') ||
+    findMatch(
+      [
+        'sekvensnr',
+        'sekvens nr',
+        'sekvens',
+        'sekvnr',
+        'sekv nr',
+        'sekv',
+        'sequence no',
+        'sequenceno',
+        'sequence',
+        'seq no',
+        'seqno',
+        'seq',
+        'levnr',
+        'lev nr',
+        'lev',
+        'leveransnr',
+        'leverans nr',
+        'delnr',
+        'del nr',
+        'lot no',
+        'lotno',
+      ],
+      ['släpp', 'rad', 'datum', 'kund', 'antal', 'planerat', 'order']
+    );
 
-  const batchSize = findMatch([
-    'antal',
-    'kvantitet',
-    'planeratantal',
-    'orderantal',
-    'revisedqtydue',
-    'planqty',
-    'quantity',
-    'qty',
-    'mängd',
-    'batch',
-    'totalt',
-  ]) || headers[3] || '';
+  const title =
+    (savedMapping.title && headers.includes(savedMapping.title) ? savedMapping.title : '') ||
+    findMatch(
+      [
+        'artikelbenämning',
+        'artikelbeskrivning',
+        'benämning',
+        'benamning',
+        'beskrivning',
+        'part description',
+        'partdescription',
+        'description',
+        'namn',
+        'artikelnamn',
+        'produktnamn',
+        'produkt',
+      ],
+      ['nr', 'nummer', 'antal', 'datum', 'pris', 'kostnad']
+    ) ||
+    headers[1] ||
+    '';
 
-  const targetDate = findMatch([
-    'planeratleveransdatum',
-    'leveransdatum',
-    'behovsdatum',
-    'duedate',
-    'needdate',
-    'revisedduedate',
-    'måldatum',
-    'färdigdatum',
-    'slutdatum',
-    'deliverydate',
-    'plannedduedate',
-    'targetdate',
-    'datum',
-  ]) || headers[4] || '';
+  const articleNumber =
+    (savedMapping.articleNumber && headers.includes(savedMapping.articleNumber) ? savedMapping.articleNumber : '') ||
+    findMatch(
+      [
+        'artikelnummer',
+        'artikelnr',
+        'art.nr',
+        'art nr',
+        'artnr',
+        'försäljningsartikel',
+        'forsaljningsartikel',
+        'säljartikel',
+        'saljartikel',
+        'part no',
+        'partno',
+        'part number',
+        'partnumber',
+        'materialnr',
+        'material nr',
+        'material',
+        'item no',
+        'itemno',
+      ],
+      ['benämning', 'beskrivning', 'antal', 'datum']
+    ) ||
+    headers[2] ||
+    '';
 
-  const customer = findMatch([
-    'kund',
-    'kundnamn',
-    'customer',
-    'customername',
-    'beställare',
-    'projekt',
-  ]);
+  const batchSize =
+    (savedMapping.batchSize && headers.includes(savedMapping.batchSize) ? savedMapping.batchSize : '') ||
+    findMatch(
+      [
+        'kvantitet',
+        'antal',
+        'orderantal',
+        'planerat antal',
+        'planeratantal',
+        'planerad kvantitet',
+        'försäljn kvant',
+        'försäljnkvant',
+        'forsaljnkvant',
+        'säljkvant',
+        'saljkvant',
+        'revised qty due',
+        'revisedqtydue',
+        'plan qty',
+        'planqty',
+        'lot size',
+        'lotsize',
+        'quantity',
+        'qty',
+        'batchstorlek',
+        'mängd',
+      ],
+      ['datum', 'pris', 'kostnad']
+    ) ||
+    headers[3] ||
+    '';
+
+  const targetDate =
+    (savedMapping.targetDate && headers.includes(savedMapping.targetDate) ? savedMapping.targetDate : '') ||
+    findMatch(
+      [
+        'planerat leveransdatum',
+        'planeratleveransdatum',
+        'leveransdatum',
+        'planerat datum',
+        'planeratdatum',
+        'planerat färdigdatum',
+        'färdigdatum',
+        'fardigdatum',
+        'planerat slutdatum',
+        'planeratslutdatum',
+        'slutdatum',
+        'måldatum',
+        'maldatum',
+        'behovsdatum',
+        'revised due date',
+        'revisedduedate',
+        'planned due date',
+        'plannedduedate',
+        'due date',
+        'duedate',
+        'need date',
+        'needdate',
+        'delivery date',
+        'deliverydate',
+        'datum',
+      ],
+      ['kund', 'antal', 'pris']
+    ) ||
+    headers[4] ||
+    '';
+
+  const customer =
+    (savedMapping.customer && headers.includes(savedMapping.customer) ? savedMapping.customer : '') ||
+    findMatch(
+      [
+        'kundens ordernr',
+        'kundens io nr',
+        'kundens order',
+        'kundorder',
+        'kundnr',
+        'kundnummer',
+        'kundnamn',
+        'kund',
+        'customer name',
+        'customer no',
+        'customer',
+        'beställare',
+        'projekt',
+      ],
+      ['datum', 'antal', 'artikel']
+    );
 
   const unit = findMatch(['enhet', 'unit', 'uom']);
-  const drawingNumber = findMatch(['ritning', 'ritningsnummer', 'drawing', 'drawingno', 'ritningsnr']);
+  const drawingNumber = findMatch(['ritningsnummer', 'ritning', 'drawing number', 'drawing', 'drawingno', 'ritningsnr']);
 
   return {
     orderId,
+    subOrder1,
+    subOrder2,
     title,
     articleNumber,
     batchSize,
@@ -286,11 +468,27 @@ export function processRowsWithMapping(
   return rawRows.map((raw, index) => {
     const errors: string[] = [];
 
-    // Extract Order ID
+    // Extract Order ID (handling split IFS cells: Ordernr + Släppnr + Sekvensnr)
     let rawOrderId = mapping.orderId ? String(raw[mapping.orderId] || '').trim() : '';
-    if (!rawOrderId) {
+    const sub1 = mapping.subOrder1 ? String(raw[mapping.subOrder1] || '').trim() : '';
+    const sub2 = mapping.subOrder2 ? String(raw[mapping.subOrder2] || '').trim() : '';
+
+    // Check if this is an Excel summary or total row (e.g. "SUMMA", "TOTALT")
+    const isSummaryRow = 
+      rawOrderId.toUpperCase() === 'SUMMA' || 
+      rawOrderId.toUpperCase() === 'TOTALT' || 
+      rawOrderId.toUpperCase().startsWith('SUMMA') ||
+      rawOrderId.toUpperCase().startsWith('TOTAL');
+
+    if (rawOrderId && !isSummaryRow && (sub1 || sub2)) {
+      rawOrderId = [rawOrderId, sub1, sub2].filter(Boolean).join('-');
+    }
+
+    if (!rawOrderId && !isSummaryRow) {
       errors.push('Ordernummer saknas');
       rawOrderId = `AO-${Date.now().toString().slice(-4)}-${index + 1}`;
+    } else if (isSummaryRow) {
+      errors.push('Summeringsrad i Excel (hoppas över)');
     }
 
     // Extract Product Title

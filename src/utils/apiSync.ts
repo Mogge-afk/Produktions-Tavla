@@ -51,6 +51,12 @@ class ApiSyncManager {
   private initSSE() {
     if (typeof window === 'undefined') return;
 
+    // On static deployments like GitHub Pages without backend Express, default to offline/standalone
+    if (window.location.hostname.endsWith('github.io')) {
+      this.setStatus('offline');
+      return;
+    }
+
     try {
       this.setStatus('connecting');
       this.eventSource = new EventSource('/api/events');
@@ -138,6 +144,10 @@ class ApiSyncManager {
     columns?: ColumnConfig[];
     archivedOrders?: ProductionOrder[];
   } | null> {
+    if (typeof window !== 'undefined' && window.location.hostname.endsWith('github.io')) {
+      return null;
+    }
+
     try {
       const res = await fetch('/api/state');
       if (!res.ok) throw new Error(`HTTP ${res.status}`);

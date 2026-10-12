@@ -44,6 +44,8 @@ interface HeaderProps {
   autoAdvanceEnabled: boolean;
   onToggleAutoAdvance: () => void;
   syncStatus?: 'connected' | 'connecting' | 'offline';
+  hasDemoOrders?: boolean;
+  onClearDemoOrders?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -68,6 +70,8 @@ export const Header: React.FC<HeaderProps> = ({
   autoAdvanceEnabled,
   onToggleAutoAdvance,
   syncStatus = 'connected',
+  hasDemoOrders = false,
+  onClearDemoOrders,
 }) => {
   const [currentTime, setCurrentTime] = useState<string>('');
   const [currentDate, setCurrentDate] = useState<string>('');
@@ -173,6 +177,18 @@ export const Header: React.FC<HeaderProps> = ({
               <FileSpreadsheet className="w-4 h-4 text-emerald-100" />
               <span>Importera Excel / ERP</span>
             </button>
+
+            {/* Quick Demo Orders Cleanup Button */}
+            {hasDemoOrders && onClearDemoOrders && (
+              <button
+                onClick={onClearDemoOrders}
+                type="button"
+                className="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-lg text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer animate-pulse"
+                title="Klicka här för att permanent ta bort de 4 inbyggda demo-artiklarna (AO-2026-101 etc.) från tavlan"
+              >
+                <span>🗑️ Rensa demo-artiklar</span>
+              </button>
+            )}
 
             {/* Primary Action: QR Scanner */}
             <button

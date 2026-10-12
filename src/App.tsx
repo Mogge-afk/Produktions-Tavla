@@ -10,7 +10,10 @@ import {
   subscribeToSync, 
   DEFAULT_COLUMNS, 
   INITIAL_ORDERS,
-  getStoredOperatorName 
+  getStoredOperatorName,
+  clearDemoOrdersFlag,
+  isDemoCleared,
+  isDemoOrderId
 } from './utils/storage';
 import { Header } from './components/Header';
 import { StatsBar } from './components/StatsBar';
@@ -25,12 +28,13 @@ import { StationModeModal } from './components/StationModeModal';
 import { ExcelImportModal } from './components/ExcelImportModal';
 import { FloorGuideModal } from './components/FloorGuideModal';
 import { ArchiveModal } from './components/ArchiveModal';
+import { ClearAllModal } from './components/ClearAllModal';
 import { MobileScannerView } from './components/MobileScannerView';
 import { HardwareGuideModal } from './components/HardwareGuideModal';
 import { OfflineQueueModal } from './components/OfflineQueueModal';
 import { playScanSuccessSound } from './utils/audio';
 import { refreshOrderPriorities, loadPrioritySettings } from './utils/priority';
-import { extractScanPayload, determineNextColumn } from './utils/qr';
+import { extractScanPayload, determineNextColumn, findOrderFlexible } from './utils/qr';
 import { apiSync, SyncStatus } from './utils/apiSync';
 import { offlineQueue } from './utils/offlineQueue';
 import { CheckCircle2, AlertCircle, Zap, Undo2 } from 'lucide-react';
@@ -89,6 +93,8 @@ export default function App() {
   const [isFloorGuideOpen, setIsFloorGuideOpen] = useState(false);
   const [isHardwareGuideOpen, setIsHardwareGuideOpen] = useState(false);
   const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
+  const [isClearAllModalOpen, setIsClearAllModalOpen] = useState(false);
+  const deletedOrdersBackupRef = useRef<{ orders: ProductionOrder[]; archived: ProductionOrder[] } | null>(null);
   const [isOfflineQueueOpen, setIsOfflineQueueOpen] = useState(false);
   const [offlineQueueCount, setOfflineQueueCount] = useState<number>(() => offlineQueue.getQueueCount());
 
@@ -155,8 +161,12 @@ export default function App() {
     apiSync.fetchState().then((state) => {
       if (state) {
         if (state.orders && state.orders.length > 0) {
-          setOrders(state.orders);
-          saveStoredOrders(state.orders);
+          const demoCleared = isDemoCleared();
+          const cleanOrders = (demoCleared || state.orders.some((o: ProductionOrder) => !isDemoOrderId(o.id)))
+            ? state.orders.filter((o: ProductionOrder) => !isDemoOrderId(o.id))
+            : state.orders;
+          setOrders(cleanOrders);
+          saveStoredOrders(cleanOrders);
         }
         if (state.columns && state.columns.length > 0) {
           setColumns(state.columns);
@@ -172,8 +182,12 @@ export default function App() {
     // Real-time updates pushed from backend (when someone scans on mobile or external API)
     const unsubState = apiSync.onStateUpdate((update) => {
       if (update.orders) {
-        setOrders(update.orders);
-        saveStoredOrders(update.orders);
+        const demoCleared = isDemoCleared();
+        const cleanOrders = (demoCleared || update.orders.some((o: ProductionOrder) => !isDemoOrderId(o.id)))
+          ? update.orders.filter((o: ProductionOrder) => !isDemoOrderId(o.id))
+          : update.orders;
+        setOrders(cleanOrders);
+        saveStoredOrders(cleanOrders);
       }
       if (update.columns) {
         setColumns(update.columns);
@@ -475,9 +489,7 @@ export default function App() {
       const autoParam = params.get('auto') === '1' || autoAdvanceOnScan;
 
       if (directOrderId) {
-        const found = orders.find(
-          (o) => o.id.toLowerCase() === directOrderId.toLowerCase()
-        );
+        const found = findOrderFlexible(orders, directOrderId);
         if (found) {
           // Clean URL so browser refresh does not re-trigger
           window.history.replaceState({}, document.title, window.location.pathname);
@@ -527,20 +539,18 @@ export default function App() {
 
           const decoded = extractScanPayload(scannedText);
           if (decoded.orderId) {
-            const found = orders.find(
-              (o) => o.id.toLowerCase() === decoded.orderId.toLowerCase()
-            );
+            const found = findOrderFlexible(orders, decoded.orderId);
             if (found) {
               e.preventDefault();
               setIsScannerOpen(false);
               setIsQuickUpdateOpen(false);
               handleAutoAdvanceOrder(found, decoded.stationId);
             } else {
-              const inArchive = archivedOrders.find((o) => o.id.toLowerCase() === decoded.orderId.toLowerCase());
+              const inArchive = findOrderFlexible(archivedOrders, decoded.orderId);
               if (inArchive) {
                 showToast(`Order "${decoded.orderId}" är redan slutförd och finns i arkivet!`, 'info');
               } else {
-                showToast(`Order "${decoded.orderId}" hittades inte på tavlan.`, 'info');
+                showToast(`Order "${decoded.orderId}" hittades inte på tavlan. Kontrollera att kolumnen för Ordernummer stämmer.`, 'info');
               }
             }
           }
@@ -621,23 +631,51 @@ export default function App() {
     setOrders((prev) => {
       const next = [newOrder, ...prev];
       saveStoredOrders(next);
+      apiSync.syncOrders(next);
       return next;
     });
     flashUpdatedCard(newOrder.id);
     showToast(`Order ${newOrder.id} skapades och lades till på tavlan.`);
   };
 
+  const hasDemoOrders = useMemo(() => {
+    return orders.some((o) => isDemoOrderId(o.id));
+  }, [orders]);
+
+  const handleClearDemoOrders = useCallback(() => {
+    clearDemoOrdersFlag();
+    setOrders((prev) => {
+      const next = prev.filter((o) => !isDemoOrderId(o.id));
+      saveStoredOrders(next);
+      apiSync.syncOrders(next);
+      return next;
+    });
+    playScanSuccessSound();
+    showToast('✓ Alla demo-artiklar har tagits bort från tavlan!');
+  }, [showToast]);
+
   // Import batch of orders from Excel / ERP-system
   const handleImportOrders = (
     importedOrders: ProductionOrder[],
     targetColumnId: string,
-    duplicateStrategy: 'update' | 'skip'
+    duplicateStrategy: 'update' | 'skip',
+    clearDemos: boolean = true
   ) => {
     const destCol = columns.find((c) => c.id === targetColumnId) || columns[0];
 
+    if (clearDemos) {
+      clearDemoOrdersFlag();
+    }
+
     setOrders((prev) => {
       const existingMap = new Map<string, ProductionOrder>();
-      prev.forEach((o) => existingMap.set(o.id.toUpperCase(), o));
+      
+      const baseOrders = clearDemos
+        ? prev.filter((o) => !isDemoOrderId(o.id))
+        : prev;
+
+      baseOrders.forEach((o) => existingMap.set(o.id.toUpperCase(), o));
+      const archivedSet = new Set((archivedOrders || []).map((o) => o.id.toUpperCase()));
 
       let updatedCount = 0;
       let addedCount = 0;
@@ -674,6 +712,10 @@ export default function App() {
             existingMap.set(idUpper, updatedExisting);
             updatedCount++;
           }
+          // If 'skip', do nothing (skip existing)
+        } else if (duplicateStrategy === 'skip' && archivedSet.has(idUpper)) {
+          // Already in archive / completed, skip duplicate
+          continue;
         } else {
           existingMap.set(idUpper, imp);
           newOrdersList.push(imp);
@@ -683,12 +725,13 @@ export default function App() {
 
       const next = Array.from(existingMap.values());
       saveStoredOrders(next);
+      apiSync.syncOrders(next);
 
       playScanSuccessSound();
       showToast(
         `${addedCount} nya ordrar lades till i "${destCol?.title}"${
           updatedCount > 0 ? ` (${updatedCount} befintliga uppdaterades)` : ''
-        }!`
+        }!${clearDemos ? ' (Demo-artiklar rensades)' : ''}`
       );
 
       if (newOrdersList.length > 0) {
@@ -743,15 +786,13 @@ export default function App() {
   const handleOrderIdentified = (orderId: string, stationId?: string, forceAuto?: boolean) => {
     setIsScannerOpen(false);
     setIsQuickUpdateOpen(false);
-    const found = orders.find(
-      (o) => o.id.toLowerCase() === orderId.toLowerCase()
-    );
+    const found = findOrderFlexible(orders, orderId);
 
     if (found) {
       handleAutoAdvanceOrder(found, stationId);
     } else {
       // Check if it was archived
-      const inArchive = archivedOrders.find((o) => o.id.toLowerCase() === orderId.toLowerCase());
+      const inArchive = findOrderFlexible(archivedOrders, orderId);
       if (inArchive) {
         showToast(`Order "${orderId}" är redan slutförd och ligger i arkivet!`, 'info');
         setIsArchiveModalOpen(true);
@@ -882,15 +923,43 @@ export default function App() {
     saveStoredColumns(newColumns);
   };
 
-  // Reset to initial demo data
-  const handleResetDemoData = () => {
-    if (confirm('Vill du återställa till demodata och standardkolumner från bilden?')) {
-      setOrders(INITIAL_ORDERS);
-      saveStoredOrders(INITIAL_ORDERS);
-      setColumns(DEFAULT_COLUMNS);
-      saveStoredColumns(DEFAULT_COLUMNS);
-      showToast('Återställd till demodata.');
+  // Delete all orders completely (wipe board)
+  const handleConfirmDeleteAll = (includeArchive: boolean) => {
+    const backupOrders = [...orders];
+    const backupArchived = [...archivedOrders];
+    deletedOrdersBackupRef.current = { orders: backupOrders, archived: backupArchived };
+
+    clearDemoOrdersFlag();
+
+    setOrders([]);
+    saveStoredOrders([]);
+    apiSync.syncOrders([]);
+
+    if (includeArchive) {
+      setArchivedOrders([]);
+      saveStoredArchivedOrders([]);
     }
+
+    playScanSuccessSound();
+    showToast(
+      `Alla ${backupOrders.length} ordrar raderades från tavlan.${includeArchive ? ' Även arkivet tömdes.' : ''}`,
+      'info',
+      {
+        label: 'Ångra',
+        onClick: () => {
+          if (deletedOrdersBackupRef.current) {
+            setOrders(backupOrders);
+            saveStoredOrders(backupOrders);
+            apiSync.syncOrders(backupOrders);
+            if (includeArchive) {
+              setArchivedOrders(backupArchived);
+              saveStoredArchivedOrders(backupArchived);
+            }
+            showToast('✓ Ordrarna återställdes!');
+          }
+        },
+      }
+    );
   };
 
   // Filtered orders for the board
@@ -998,6 +1067,8 @@ export default function App() {
         autoAdvanceEnabled={autoAdvanceOnScan}
         onToggleAutoAdvance={handleToggleAutoAdvance}
         syncStatus={syncStatus}
+        hasDemoOrders={hasDemoOrders}
+        onClearDemoOrders={handleClearDemoOrders}
         offlineQueueCount={offlineQueueCount}
         onOpenOfflineQueue={() => setIsOfflineQueueOpen(true)}
       />
@@ -1008,7 +1079,7 @@ export default function App() {
         columns={columns}
         archivedCount={archivedOrders.length}
         onOpenArchive={() => setIsArchiveModalOpen(true)}
-        onResetDemoData={handleResetDemoData}
+        onDeleteAllOrders={() => setIsClearAllModalOpen(true)}
       />
 
       {/* Main Production Board */}
@@ -1044,13 +1115,16 @@ export default function App() {
       />
 
       {/* MODAL 2: Excel / ERP-system Import */}
-      <ExcelImportModal
-        isOpen={isExcelImportOpen}
-        onClose={() => setIsExcelImportOpen(false)}
-        columns={columns}
-        existingOrders={orders}
-        onImportOrders={handleImportOrders}
-      />
+      {isExcelImportOpen && (
+        <ExcelImportModal
+          isOpen={isExcelImportOpen}
+          onClose={() => setIsExcelImportOpen(false)}
+          columns={columns}
+          existingOrders={orders}
+          archivedOrders={archivedOrders}
+          onImportOrders={handleImportOrders}
+        />
+      )}
 
       {/* MODAL 3: Shop Floor & Scanner Integration Guide */}
       <FloorGuideModal
@@ -1150,6 +1224,15 @@ export default function App() {
           playScanSuccessSound();
           showToast('✓ Offline-kön har synkroniserats med servern!');
         }}
+      />
+
+      {/* MODAL 13: Clear All Orders Confirmation */}
+      <ClearAllModal
+        isOpen={isClearAllModalOpen}
+        onClose={() => setIsClearAllModalOpen(false)}
+        activeCount={orders.length}
+        archivedCount={archivedOrders.length}
+        onConfirmDelete={handleConfirmDeleteAll}
       />
     </div>
   );

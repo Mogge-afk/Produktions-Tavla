@@ -1,5 +1,5 @@
 import React from 'react';
-import { Layers, AlertTriangle, CheckCircle, Clock, RotateCcw, Archive } from 'lucide-react';
+import { Layers, AlertTriangle, CheckCircle, Clock, Trash2, Archive } from 'lucide-react';
 import { ColumnConfig, ProductionOrder } from '../types';
 
 interface StatsBarProps {
@@ -7,7 +7,7 @@ interface StatsBarProps {
   columns: ColumnConfig[];
   archivedCount?: number;
   onOpenArchive?: () => void;
-  onResetDemoData: () => void;
+  onDeleteAllOrders: () => void;
 }
 
 export const StatsBar: React.FC<StatsBarProps> = ({ 
@@ -15,7 +15,7 @@ export const StatsBar: React.FC<StatsBarProps> = ({
   columns, 
   archivedCount = 0, 
   onOpenArchive, 
-  onResetDemoData 
+  onDeleteAllOrders 
 }) => {
   const urgentCount = orders.filter((o) => o.priority === 'urgent' || o.priority === 'high').length;
   const lastColId = columns[columns.length - 1]?.id;
@@ -68,17 +68,19 @@ export const StatsBar: React.FC<StatsBarProps> = ({
         </div>
 
         {/* Board utilities */}
-        <div className="flex items-center gap-2 text-neutral-500">
+        <div className="flex items-center gap-3 text-neutral-500">
           <span className="hidden sm:inline">Dra kort eller använd QR-skannern för att uppdatera</span>
-          <button
-            onClick={onResetDemoData}
-            type="button"
-            className="text-[11px] text-neutral-600 hover:text-neutral-900 underline flex items-center gap-1 cursor-pointer"
-            title="Återställ demodata till ursprungsläget"
-          >
-            <RotateCcw className="w-3 h-3" />
-            <span>Återställ demodata</span>
-          </button>
+          {orders.length > 0 && (
+            <button
+              onClick={onDeleteAllOrders}
+              type="button"
+              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-300 rounded-md shadow-2xs transition active:scale-95 cursor-pointer"
+              title="Radera samtliga ordrar från tavlan (töm tavlan)"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+              <span>Radera allt</span>
+            </button>
+          )}
         </div>
       </div>
     </div>

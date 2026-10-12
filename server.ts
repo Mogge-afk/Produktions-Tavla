@@ -1,4 +1,4 @@
-import express, { Request, Response } from 'express';
+import express, { type Request, type Response } from 'express';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -108,11 +108,32 @@ const INITIAL_ORDERS = [
   },
 ];
 
+function isDemoOrderId(id: string): boolean {
+  if (!id) return false;
+  const upper = String(id).trim().toUpperCase();
+  return (
+    upper.startsWith('AO-2026-') ||
+    upper.startsWith('DEMO-') ||
+    upper === 'AO-2026-101' ||
+    upper === 'AO-2026-102' ||
+    upper === 'AO-2026-103' ||
+    upper === 'AO-2026-092' ||
+    upper === 'AO-2026-084' ||
+    upper.startsWith('SUMMA') ||
+    upper.startsWith('TOTAL')
+  );
+}
+
 function loadServerState(): ServerState {
   try {
     if (fs.existsSync(STATE_FILE)) {
       const data = fs.readFileSync(STATE_FILE, 'utf-8');
-      return JSON.parse(data);
+      const parsed: ServerState = JSON.parse(data);
+      // If server state already has real user orders, ensure demo orders never remain
+      if (Array.isArray(parsed.orders) && parsed.orders.some((o: any) => !isDemoOrderId(o.id))) {
+        parsed.orders = parsed.orders.filter((o: any) => !isDemoOrderId(o.id));
+      }
+      return parsed;
     }
   } catch (err) {
     console.error('Error reading state file:', err);
@@ -255,6 +276,94 @@ app.post('/api/import-orders', (req: Request, res: Response) => {
   res.json({ success: true, added, updated, total: currentState.orders.length });
 });
 
+function findOrderIndexFlexible(orders: any[], queryId: string): number {
+  if (!queryId) return -1;
+  const q = String(queryId).trim();
+  if (!q) return -1;
+
+  // 1. Direct exact match
+  let idx = orders.findIndex((o) => o.id && o.id.toLowerCase() === q.toLowerCase());
+  if (idx !== -1) return idx;
+
+  // 2. Strip asterisks (Code 39 barcode artifacts: *12345*)
+  const noStars = q.replace(/^\*+|\*+$/g, '');
+  if (noStars && noStars !== q) {
+    idx = orders.findIndex((o) => o.id && o.id.toLowerCase() === noStars.toLowerCase());
+    if (idx !== -1) return idx;
+  }
+
+  const cleanCandidate = noStars || q;
+
+  // 3. Strip prefixes
+  const noPrefix = cleanCandidate.replace(/^(ORD|SO|PO|AO|IFS|MO)[:-]?/i, '').trim();
+  if (noPrefix) {
+    idx = orders.findIndex((o) => {
+      const oNoPrefix = (o.id || '').replace(/^(ORD|SO|PO|AO|IFS|MO)[:-]?/i, '').trim();
+      return oNoPrefix.toLowerCase() === noPrefix.toLowerCase();
+    });
+    if (idx !== -1) return idx;
+  }
+
+  // 4. Strip leading zeros (Excel drops leading zeros e.g. "004521" vs "4521")
+  const noZeros = noPrefix.replace(/^0+/, '');
+  if (noZeros) {
+    idx = orders.findIndex((o) => {
+      const oNoZeros = (o.id || '').replace(/^(ORD|SO|PO|AO|IFS|MO)[:-]?/i, '').replace(/^0+/, '');
+      return oNoZeros.toLowerCase() === noZeros.toLowerCase();
+    });
+    if (idx !== -1) return idx;
+  }
+
+  // 5. IFS Order + Release No: "P100452-1", "P100452/1", "P100452*"
+  if (cleanCandidate.includes('-') || cleanCandidate.includes('/') || cleanCandidate.includes('.') || cleanCandidate.endsWith('*')) {
+    const basePart = cleanCandidate.replace(/\*+$/, '').split(/[-/.]/)[0].trim();
+    if (basePart) {
+      idx = orders.findIndex((o) => o.id && o.id.toLowerCase() === basePart.toLowerCase());
+      if (idx !== -1) return idx;
+      if (/^\d+$/.test(basePart)) {
+        idx = orders.findIndex((o) => o.id && o.id.toLowerCase() === `p${basePart.toLowerCase()}`);
+        if (idx !== -1) return idx;
+      }
+    }
+  }
+
+  // 5b. Reverse IFS sub-order: user scans base "P37275" and order on board is "P37275-1-1"
+  idx = orders.findIndex((o) => o.id && o.id.toLowerCase().startsWith(cleanCandidate.toLowerCase() + '-'));
+  if (idx !== -1) return idx;
+
+  // 5c. P-prefix bidirectional handling: e.g. "P123456" vs "123456"
+  // If query is "123456" (only digits), check if an order exists as "P123456" or "P123456-..."
+  if (/^\d+$/.test(cleanCandidate)) {
+    idx = orders.findIndex(
+      (o) =>
+        o.id &&
+        (o.id.toLowerCase() === `p${cleanCandidate.toLowerCase()}` ||
+          o.id.toLowerCase().startsWith(`p${cleanCandidate.toLowerCase()}-`))
+    );
+    if (idx !== -1) return idx;
+  }
+  // If query starts with "P", check if an order exists without "P"
+  if (/^p/i.test(cleanCandidate)) {
+    const withoutP = cleanCandidate.slice(1);
+    idx = orders.findIndex(
+      (o) =>
+        o.id &&
+        (o.id.toLowerCase() === withoutP.toLowerCase() ||
+          o.id.toLowerCase().startsWith(withoutP.toLowerCase() + '-'))
+    );
+    if (idx !== -1) return idx;
+  }
+
+  // 6. Article number or Drawing number fallback
+  idx = orders.findIndex((o) => 
+    (o.articleNumber && o.articleNumber.toLowerCase() === cleanCandidate.toLowerCase()) ||
+    (o.drawingNumber && o.drawingNumber.toLowerCase() === cleanCandidate.toLowerCase())
+  );
+  if (idx !== -1) return idx;
+
+  return -1;
+}
+
 function executeScanLogic(body: {
   scan?: string;
   orderId?: string;
@@ -302,15 +411,11 @@ function executeScanLogic(body: {
   const cleanOrderId = String(orderId).trim();
   const cleanStationId = stationId ? String(stationId).trim() : undefined;
 
-  const foundIndex = currentState.orders.findIndex(
-    (o) => o.id.toLowerCase() === cleanOrderId.toLowerCase()
-  );
+  const foundIndex = findOrderIndexFlexible(currentState.orders, cleanOrderId);
 
   if (foundIndex === -1) {
-    const isArchived = currentState.archivedOrders.some(
-      (o) => o.id.toLowerCase() === cleanOrderId.toLowerCase()
-    );
-    if (isArchived) {
+    const archivedIndex = findOrderIndexFlexible(currentState.archivedOrders, cleanOrderId);
+    if (archivedIndex !== -1) {
       return {
         status: 200,
         data: {
@@ -324,7 +429,7 @@ function executeScanLogic(body: {
       status: 404,
       data: {
         success: false,
-        error: `Order ${cleanOrderId} hittades inte på tavlan.`,
+        error: `Order ${cleanOrderId} hittades inte på tavlan. Kontrollera att kolumnen för Ordernummer matchar i Excel.`,
       },
     };
   }

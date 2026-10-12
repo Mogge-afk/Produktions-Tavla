@@ -353,17 +353,56 @@ if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
   }
 }
 
+export function isDemoOrderId(id: string): boolean {
+  if (!id) return false;
+  const upper = id.trim().toUpperCase();
+  return (
+    upper.startsWith('AO-2026-') ||
+    upper.startsWith('DEMO-') ||
+    upper === 'AO-2026-101' ||
+    upper === 'AO-2026-102' ||
+    upper === 'AO-2026-103' ||
+    upper === 'AO-2026-092' ||
+    upper === 'AO-2026-084' ||
+    upper.startsWith('SUMMA') ||
+    upper.startsWith('TOTAL')
+  );
+}
+
+export function clearDemoOrdersFlag(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem('planeringstavla_demo_cleared', 'true');
+  } catch {}
+}
+
+export function isDemoCleared(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return localStorage.getItem('planeringstavla_demo_cleared') === 'true';
+  } catch {
+    return false;
+  }
+}
+
 export function loadStoredOrders(): ProductionOrder[] {
-  if (typeof window === 'undefined') return INITIAL_ORDERS;
+  if (typeof window === 'undefined') return [];
   try {
     const data = localStorage.getItem(STORAGE_KEYS.ORDERS);
+    const demoCleared = isDemoCleared();
     if (!data) {
+      if (demoCleared) return [];
       saveStoredOrders(INITIAL_ORDERS);
       return INITIAL_ORDERS;
     }
     const parsed: ProductionOrder[] = JSON.parse(data);
+    // If demo was cleared OR user already has real orders, ensure demo IDs are never injected
+    const hasRealOrders = parsed.some((o) => !isDemoOrderId(o.id));
+    const cleanList = (demoCleared || hasRealOrders)
+      ? parsed.filter((o) => !isDemoOrderId(o.id))
+      : parsed;
     // Ensure all fields exist
-    return parsed.map((o) => ({
+    return cleanList.map((o) => ({
       ...o,
       reports: o.reports || [],
       stationProgress: o.stationProgress || {},
@@ -372,7 +411,7 @@ export function loadStoredOrders(): ProductionOrder[] {
     }));
   } catch (e) {
     console.error('Failed to parse orders:', e);
-    return INITIAL_ORDERS;
+    return [];
   }
 }
 
