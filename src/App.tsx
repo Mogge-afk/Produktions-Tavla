@@ -32,16 +32,17 @@ import { ClearAllModal } from './components/ClearAllModal';
 import { MobileScannerView } from './components/MobileScannerView';
 import { HardwareGuideModal } from './components/HardwareGuideModal';
 import { OfflineQueueModal } from './components/OfflineQueueModal';
-import { playScanSuccessSound } from './utils/audio';
+import { QuickStationQRModal } from './components/QuickStationQRModal';
+import { playScanSuccessSound, playWarningSound } from './utils/audio';
 import { refreshOrderPriorities, loadPrioritySettings } from './utils/priority';
 import { extractScanPayload, determineNextColumn, findOrderFlexible } from './utils/qr';
 import { apiSync, SyncStatus } from './utils/apiSync';
 import { offlineQueue } from './utils/offlineQueue';
-import { CheckCircle2, AlertCircle, Zap, Undo2 } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Zap, Undo2, XCircle } from 'lucide-react';
 
 interface ToastState {
   text: string;
-  type: 'success' | 'info';
+  type: 'success' | 'info' | 'error' | 'warning';
   action?: {
     label: string;
     onClick: () => void;
@@ -94,6 +95,8 @@ export default function App() {
   const [isHardwareGuideOpen, setIsHardwareGuideOpen] = useState(false);
   const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
   const [isClearAllModalOpen, setIsClearAllModalOpen] = useState(false);
+  const [quickQROrder, setQuickQROrder] = useState<ProductionOrder | null>(null);
+  const [isQuickQROpen, setIsQuickQROpen] = useState(false);
   const deletedOrdersBackupRef = useRef<{ orders: ProductionOrder[]; archived: ProductionOrder[] } | null>(null);
   const [isOfflineQueueOpen, setIsOfflineQueueOpen] = useState(false);
   const [offlineQueueCount, setOfflineQueueCount] = useState<number>(() => offlineQueue.getQueueCount());
@@ -114,7 +117,7 @@ export default function App() {
 
   const showToast = useCallback((
     text: string, 
-    type: 'success' | 'info' = 'success',
+    type: 'success' | 'info' | 'error' | 'warning' = 'success',
     action?: { label: string; onClick: () => void },
     secondaryAction?: { label: string; onClick: () => void }
   ) => {
@@ -124,7 +127,7 @@ export default function App() {
     setToastMessage({ text, type, action, secondaryAction });
     toastTimerRef.current = setTimeout(() => {
       setToastMessage(null);
-    }, 6000);
+    }, 7000);
   }, []);
 
   // Auto-advance mode: when true, scanning a station QR directly hops order to next station
@@ -207,6 +210,12 @@ export default function App() {
         }
         showToast(
           `✓ ${event.orderId}: Flyttad från "${event.fromStation}" till "${event.toStation}"!`,
+          'success'
+        );
+      } else if (event.type === 'ORDER_ARCHIVED') {
+        playScanSuccessSound();
+        showToast(
+          `✓ ${event.orderId}: Slutförd vid "${event.stationTitle || 'sista stationen'}" och arkiverad!`,
           'success'
         );
       }
@@ -298,25 +307,49 @@ export default function App() {
   }, [columns, flashUpdatedCard]);
 
   // Archive completed order (e.g. from last station or order detail)
+  // Archive completed order (e.g. from last station or order detail)
   const handleArchiveOrder = useCallback((orderId: string, reason = 'Slutförd leverans') => {
     const target = orders.find((o) => o.id === orderId);
     if (!target) return;
 
     const op = getStoredOperatorName() || 'Operatör';
+    const nowIso = new Date().toISOString();
+    const stationTitle = columns.find((c) => c.id === target.columnId)?.title || 'Klar för leverans';
+
     const archivedItem: ProductionOrder = {
       ...target,
       isArchived: true,
-      archivedAt: new Date().toISOString(),
+      archivedAt: nowIso,
       archivedBy: op,
       archivedReason: reason,
+      completedAt: nowIso,
+      updatedAt: nowIso,
+      stationProgress: {
+        ...(target.stationProgress || {}),
+        [target.columnId]: target.batchSize,
+      },
+      reports: [
+        {
+          id: 'rep_' + Date.now(),
+          timestamp: nowIso,
+          stationId: target.columnId,
+          stationName: stationTitle,
+          operator: op,
+          quantity: target.batchSize,
+          totalSoFar: target.batchSize,
+          orderTotal: target.batchSize,
+          note: reason,
+        },
+        ...(target.reports || []),
+      ],
       notes: [
         {
           id: 'n_arch_' + Date.now(),
-          timestamp: new Date().toISOString(),
+          timestamp: nowIso,
           operator: op,
-          text: `Ordern slutförd och flyttad till arkiv.`,
+          text: `Ordern slutförd vid sista stationen "${stationTitle}" och flyttad till arkiv.`,
           type: 'approved',
-          stageName: columns.find((c) => c.id === target.columnId)?.title || 'Arkiv',
+          stageName: stationTitle,
         },
         ...target.notes,
       ],
@@ -326,6 +359,7 @@ export default function App() {
     setOrders((prev) => {
       const next = prev.filter((o) => o.id !== orderId);
       saveStoredOrders(next);
+      apiSync.syncOrders(next);
       return next;
     });
 
@@ -333,6 +367,7 @@ export default function App() {
     setArchivedOrders((prev) => {
       const next = [archivedItem, ...prev.filter((o) => o.id !== orderId)];
       saveStoredArchivedOrders(next);
+      apiSync.syncArchived(next);
       return next;
     });
 
@@ -342,32 +377,42 @@ export default function App() {
     }
 
     playScanSuccessSound();
-    showToast(`Order ${orderId} har slutförts och flyttats till arkivet!`);
+    showToast(
+      `✓ Order ${orderId} har slutförts vid "${stationTitle}" och flyttats till arkivet!`,
+      'success'
+    );
   }, [orders, columns, selectedOrder, showToast]);
 
   // Auto-advance order to next stage upon QR scan (e.g. Montering ➔ Test)
   const handleAutoAdvanceOrder = useCallback(
     (targetOrder: ProductionOrder, scannedStationId?: string) => {
-      const { nextColumn, fromColumn } = determineNextColumn(
+      const result = determineNextColumn(
         columns,
         targetOrder.columnId,
         scannedStationId
       );
 
+      // SPÄRR: If the scan is blocked (skipping steps or going backwards)
+      if (result.blocked) {
+        playWarningSound();
+        flashUpdatedCard(targetOrder.id);
+        showToast(
+          result.message || `⛔ SPÄRR: Kan inte hoppa över steg eller gå bakåt i flödet.`,
+          'error'
+        );
+        return;
+      }
+
+      const { nextColumn, fromColumn } = result;
       const fromColTitle = fromColumn?.title || 'Tidigare station';
       const previousColumnId = targetOrder.columnId;
 
       if (!nextColumn) {
-        // Order is already at the last station (e.g. Klar för leverans)
-        playScanSuccessSound();
-        flashUpdatedCard(targetOrder.id);
-        showToast(
-          `Order ${targetOrder.id} är vid sista stationen ("${fromColTitle}")! Vill du arkivera den?`,
-          'info',
-          {
-            label: 'Arkivera nu',
-            onClick: () => handleArchiveOrder(targetOrder.id, 'Slutförd vid sista stationen'),
-          }
+        // Order is at the last station (e.g. Klar för leverans)
+        // Scanning it automatically completes and archives the order!
+        handleArchiveOrder(
+          targetOrder.id,
+          `Slutförd vid sista stationen ("${fromColTitle}") via QR-skanning`
         );
         return;
       }
@@ -675,49 +720,92 @@ export default function App() {
         : prev;
 
       baseOrders.forEach((o) => existingMap.set(o.id.toUpperCase(), o));
-      const archivedSet = new Set((archivedOrders || []).map((o) => o.id.toUpperCase()));
+
+      // Normalized sets for duplicate checking (with and without 'P' prefix)
+      const normalizedExisting = new Set<string>();
+      baseOrders.forEach((o) => {
+        const u = o.id.trim().toUpperCase();
+        normalizedExisting.add(u);
+        if (u.startsWith('P')) normalizedExisting.add(u.slice(1));
+        else normalizedExisting.add(`P${u}`);
+      });
+
+      const normalizedArchived = new Set<string>();
+      (archivedOrders || []).forEach((o) => {
+        const u = o.id.trim().toUpperCase();
+        normalizedArchived.add(u);
+        if (u.startsWith('P')) normalizedArchived.add(u.slice(1));
+        else normalizedArchived.add(`P${u}`);
+      });
 
       let updatedCount = 0;
       let addedCount = 0;
-
+      let skippedCount = 0;
       const newOrdersList: ProductionOrder[] = [];
 
       for (const imp of importedOrders) {
-        const idUpper = imp.id.toUpperCase();
-        if (existingMap.has(idUpper)) {
+        const idUpper = imp.id.trim().toUpperCase();
+        const idNoP = idUpper.startsWith('P') ? idUpper.slice(1) : idUpper;
+        const idWithP = idUpper.startsWith('P') ? idUpper : `P${idUpper}`;
+
+        const isAlreadyActive =
+          existingMap.has(idUpper) ||
+          normalizedExisting.has(idUpper) ||
+          normalizedExisting.has(idNoP) ||
+          normalizedExisting.has(idWithP);
+
+        const isAlreadyArchived =
+          normalizedArchived.has(idUpper) ||
+          normalizedArchived.has(idNoP) ||
+          normalizedArchived.has(idWithP);
+
+        if (isAlreadyActive) {
           if (duplicateStrategy === 'update') {
-            const existing = existingMap.get(idUpper)!;
-            const updatedExisting: ProductionOrder = {
-              ...existing,
-              title: imp.title || existing.title,
-              articleNumber: imp.articleNumber || existing.articleNumber,
-              batchSize: imp.batchSize || existing.batchSize,
-              targetDate: imp.targetDate || existing.targetDate,
-              priority: imp.priority || existing.priority,
-              customer: imp.customer !== 'ERP Order' && imp.customer !== 'Monitor Order' && imp.customer !== 'IFS Order' ? imp.customer : existing.customer,
-              drawingNumber: imp.drawingNumber || existing.drawingNumber,
-              updatedAt: new Date().toISOString(),
-              notes: [
-                {
-                  id: 'n_upd_' + Date.now(),
-                  timestamp: new Date().toISOString(),
-                  operator: 'ERP Import',
-                  text: `Uppdaterad från Excel. Nytt leveransdatum: ${imp.targetDate}, Antal: ${imp.batchSize} ${existing.unit}. Prioritet: ${imp.priority}.`,
-                  type: 'info',
-                  stageName: destCol?.title,
-                },
-                ...existing.notes,
-              ],
-            };
-            existingMap.set(idUpper, updatedExisting);
-            updatedCount++;
+            const existingKey = existingMap.has(idUpper)
+              ? idUpper
+              : Array.from(existingMap.keys()).find(
+                  (k) => k === idNoP || k === idWithP
+                ) || idUpper;
+            const existing = existingMap.get(existingKey);
+            if (existing) {
+              const updatedExisting: ProductionOrder = {
+                ...existing,
+                title: imp.title || existing.title,
+                articleNumber: imp.articleNumber || existing.articleNumber,
+                batchSize: imp.batchSize || existing.batchSize,
+                targetDate: imp.targetDate || existing.targetDate,
+                priority: imp.priority || existing.priority,
+                customer: imp.customer !== 'ERP Order' && imp.customer !== 'Monitor Order' && imp.customer !== 'IFS Order' ? imp.customer : existing.customer,
+                drawingNumber: imp.drawingNumber || existing.drawingNumber,
+                updatedAt: new Date().toISOString(),
+                notes: [
+                  {
+                    id: 'n_upd_' + Date.now(),
+                    timestamp: new Date().toISOString(),
+                    operator: 'ERP Import',
+                    text: `Uppdaterad från Excel. Nytt leveransdatum: ${imp.targetDate}, Antal: ${imp.batchSize} ${existing.unit}. Prioritet: ${imp.priority}.`,
+                    type: 'info',
+                    stageName: destCol?.title,
+                  },
+                  ...existing.notes,
+                ],
+              };
+              existingMap.set(existingKey, updatedExisting);
+              updatedCount++;
+            }
+          } else {
+            // duplicateStrategy === 'skip': safely skip existing duplicate
+            skippedCount++;
           }
-          // If 'skip', do nothing (skip existing)
-        } else if (duplicateStrategy === 'skip' && archivedSet.has(idUpper)) {
+        } else if (isAlreadyArchived) {
           // Already in archive / completed, skip duplicate
-          continue;
+          skippedCount++;
         } else {
+          // Genuinely new order!
           existingMap.set(idUpper, imp);
+          normalizedExisting.add(idUpper);
+          normalizedExisting.add(idNoP);
+          normalizedExisting.add(idWithP);
           newOrdersList.push(imp);
           addedCount++;
         }
@@ -728,11 +816,20 @@ export default function App() {
       apiSync.syncOrders(next);
 
       playScanSuccessSound();
-      showToast(
-        `${addedCount} nya ordrar lades till i "${destCol?.title}"${
-          updatedCount > 0 ? ` (${updatedCount} befintliga uppdaterades)` : ''
-        }!${clearDemos ? ' (Demo-artiklar rensades)' : ''}`
-      );
+      if (addedCount === 0 && skippedCount > 0) {
+        showToast(
+          `Inga nya ordrar lades till. Samtliga ${skippedCount} ordrar fanns redan på tavlan eller i arkivet och hoppades över för att undvika dubbletter.`,
+          'info'
+        );
+      } else {
+        showToast(
+          `✓ ${addedCount} nya ordrar lades till i "${destCol?.title}"!${
+            skippedCount > 0 ? ` (${skippedCount} dubbletter hoppades över)` : ''
+          }${updatedCount > 0 ? ` (${updatedCount} befintliga uppdaterades)` : ''}${
+            clearDemos ? ' (Demo-artiklar rensades)' : ''
+          }`
+        );
+      }
 
       if (newOrdersList.length > 0) {
         flashUpdatedCard(newOrdersList[0].id);
@@ -862,6 +959,11 @@ export default function App() {
               type: 'stage_change',
               stageName: targetNextObj?.title,
             });
+          } else if (moveNextStage && !targetNextColumnId) {
+            // Completed at the last station! Automatically archive order!
+            setTimeout(() => {
+              handleArchiveOrder(orderId, `Slutförd vid sista stationen ("${stationObj?.title || 'Klar'}")`);
+            }, 50);
           } else if (stationId !== ord.columnId) {
             newColumnId = stationId;
           }
@@ -1003,10 +1105,22 @@ export default function App() {
       
       {/* Toast Notification with Undo & Quick actions */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-neutral-950 text-white px-5 py-3.5 rounded-xl shadow-2xl border-2 border-neutral-700 flex flex-wrap items-center gap-3 animate-in slide-in-from-bottom duration-200 max-w-xl">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-            <span className="text-sm font-bold">{toastMessage.text}</span>
+        <div className={`fixed bottom-6 right-6 z-50 text-white px-5 py-3.5 rounded-xl shadow-2xl border-2 flex flex-wrap items-center gap-3 animate-in slide-in-from-bottom duration-200 max-w-xl ${
+          toastMessage.type === 'error'
+            ? 'bg-rose-950 border-rose-600 text-white ring-2 ring-rose-500/30'
+            : toastMessage.type === 'warning'
+            ? 'bg-amber-950 border-amber-600 text-white ring-2 ring-amber-500/30'
+            : 'bg-neutral-950 border-neutral-700 text-white'
+        }`}>
+          <div className="flex items-center gap-2.5">
+            {toastMessage.type === 'error' ? (
+              <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />
+            ) : toastMessage.type === 'warning' ? (
+              <AlertCircle className="w-5 h-5 text-amber-400 shrink-0" />
+            ) : (
+              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+            )}
+            <span className="text-sm font-bold leading-snug">{toastMessage.text}</span>
           </div>
           {(toastMessage.action || toastMessage.secondaryAction) && (
             <div className="flex items-center gap-2 ml-auto">
@@ -1069,6 +1183,7 @@ export default function App() {
         syncStatus={syncStatus}
         hasDemoOrders={hasDemoOrders}
         onClearDemoOrders={handleClearDemoOrders}
+        onOpenClearAll={() => setIsClearAllModalOpen(true)}
         offlineQueueCount={offlineQueueCount}
         onOpenOfflineQueue={() => setIsOfflineQueueOpen(true)}
       />
@@ -1093,8 +1208,8 @@ export default function App() {
           setIsOrderDetailOpen(true);
         }}
         onQuickQR={(ord) => {
-          setPrintTargetOrderId(ord.id);
-          setIsPrintModalOpen(true);
+          setQuickQROrder(ord);
+          setIsQuickQROpen(true);
         }}
         onArchiveOrder={handleArchiveOrder}
         onNewOrderInColumn={(colId) => {
@@ -1233,6 +1348,25 @@ export default function App() {
         activeCount={orders.length}
         archivedCount={archivedOrders.length}
         onConfirmDelete={handleConfirmDeleteAll}
+      />
+
+      {/* MODAL 14: Quick Station-Bound QR Code Modal */}
+      <QuickStationQRModal
+        isOpen={isQuickQROpen}
+        onClose={() => {
+          setIsQuickQROpen(false);
+          setQuickQROrder(null);
+        }}
+        order={quickQROrder ? orders.find((o) => o.id === quickQROrder.id) || quickQROrder : null}
+        columns={columns}
+        onOpenOrderDetail={(ord) => {
+          setSelectedOrder(ord);
+          setIsOrderDetailOpen(true);
+        }}
+        onOpenPrint={(ord) => {
+          setPrintTargetOrderId(ord.id);
+          setIsPrintModalOpen(true);
+        }}
       />
     </div>
   );

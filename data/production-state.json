@@ -8,12 +8,20 @@
       "batchSize": 10,
       "unit": "st",
       "priority": "urgent",
-      "columnId": "col-planerat",
+      "columnId": "col-material",
       "targetDate": "2026-10-08",
       "createdAt": "2026-10-12T05:11:38.177Z",
-      "updatedAt": "2026-10-12T06:15:16.893Z",
+      "updatedAt": "2026-10-12T17:48:27.977Z",
       "operator": "ERP Importerad",
       "notes": [
+        {
+          "id": "n_scan_1791827307977",
+          "timestamp": "2026-10-12T17:48:27.977Z",
+          "operator": "Operatör (Golvskanner)",
+          "text": "Skannad vid \"Planerat\" ➔ automatiskt flyttad till \"Material uttaget\".",
+          "type": "stage_change",
+          "stageName": "Material uttaget"
+        },
         {
           "id": "n_1791781898177_yt5f",
           "timestamp": "2026-10-12T05:11:38.177Z",
@@ -23,8 +31,22 @@
           "stageName": "Planerat"
         }
       ],
-      "reports": [],
-      "stationProgress": {},
+      "reports": [
+        {
+          "id": "rep_1791827307977",
+          "timestamp": "2026-10-12T17:48:27.977Z",
+          "stationId": "col-planerat",
+          "stationName": "Planerat",
+          "operator": "Operatör (Golvskanner)",
+          "quantity": 10,
+          "totalSoFar": 10,
+          "orderTotal": 10,
+          "note": "Skannad och flyttad via realtids-API"
+        }
+      ],
+      "stationProgress": {
+        "col-planerat": 10
+      },
       "checklists": {},
       "tags": [
         "ERP"
@@ -14703,5 +14725,5 @@
     }
   ],
   "archivedOrders": [],
-  "lastUpdated": "2026-10-12T06:15:16.893Z"
+  "lastUpdated": "2026-10-12T17:48:27.977Z"
 }

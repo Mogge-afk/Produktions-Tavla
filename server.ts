@@ -437,34 +437,136 @@ function executeScanLogic(body: {
   const targetOrder = currentState.orders[foundIndex];
   const columns = currentState.columns;
 
-  // Determine which station was finished and what next station is
-  const refStationId = cleanStationId || targetOrder.columnId;
-  const refIndex = columns.findIndex((c: any) => c.id === refStationId);
-  const fromColumn = columns[refIndex] || columns.find((c: any) => c.id === targetOrder.columnId) || columns[0];
+  const currentIdx = columns.findIndex((c: any) => c.id === targetOrder.columnId);
+  const effectiveCurrentIdx = currentIdx >= 0 ? currentIdx : 0;
+  const currentCol = columns[effectiveCurrentIdx] || columns[0];
 
-  const isLast = refIndex >= columns.length - 1;
-  const nextColumn = !isLast ? columns[refIndex + 1] : null;
+  // SPÄRR: If a specific station was scanned (e.g. ORD:P37275:col-test)
+  if (cleanStationId) {
+    const cleanStationLower = cleanStationId.toLowerCase();
+    const scannedCol = columns.find(
+      (c: any) =>
+        c.id.toLowerCase() === cleanStationLower ||
+        c.title.toLowerCase() === cleanStationLower
+    );
+
+    if (scannedCol) {
+      const scannedIdx = columns.findIndex((c: any) => c.id === scannedCol.id);
+
+      // Block skipping ahead (e.g. order is at Produktion, scanned Test)
+      if (scannedIdx > effectiveCurrentIdx) {
+        const nextExpected = columns[effectiveCurrentIdx + 1];
+        return {
+          status: 400,
+          data: {
+            success: false,
+            blocked: true,
+            reason: 'skip_ahead',
+            error: `Spärr: Order ${targetOrder.id} befinner sig på station "${currentCol.title}". Du skannade koden för "${scannedCol.title}". Det går inte att hoppa över steg! Skanna koden för "${currentCol.title}" för att slutföra steget och gå vidare till "${nextExpected?.title || 'nästa steg'}".`,
+            currentStation: currentCol.title,
+            scannedStation: scannedCol.title,
+            order: targetOrder,
+          },
+        };
+      }
+
+      // Block going backwards (e.g. order is at Produktion, scanned Material)
+      if (scannedIdx < effectiveCurrentIdx) {
+        return {
+          status: 400,
+          data: {
+            success: false,
+            blocked: true,
+            reason: 'go_back',
+            error: `Spärr: Order ${targetOrder.id} har redan passerat station "${scannedCol.title}" och befinner sig på "${currentCol.title}". Det går inte att gå bakåt i flödet! Skanna koden för "${currentCol.title}" för att gå vidare.`,
+            currentStation: currentCol.title,
+            scannedStation: scannedCol.title,
+            order: targetOrder,
+          },
+        };
+      }
+    }
+  }
+
+  // Determine next column from current station (sequential)
+  const isLast = effectiveCurrentIdx >= columns.length - 1;
+  const nextColumn = !isLast ? columns[effectiveCurrentIdx + 1] : null;
+  const fromColumn = currentCol;
 
   const nowIso = new Date().toISOString();
   const op = operator || 'Operatör (Golvskanner)';
   const qty = Number(quantity) || targetOrder.batchSize || 1;
 
   if (!nextColumn) {
-    // Already at last column!
+    // Order is at the last station ("Klar för leverans") - scanning it finishes and archives the order!
+    const completedOrder = {
+      ...targetOrder,
+      isArchived: true,
+      archivedAt: nowIso,
+      archivedBy: op,
+      archivedReason: `Slutförd vid sista stationen ("${fromColumn.title}") via QR-skanning`,
+      completedAt: nowIso,
+      updatedAt: nowIso,
+      stationProgress: {
+        ...(targetOrder.stationProgress || {}),
+        [fromColumn.id]: qty,
+      },
+      reports: [
+        {
+          id: 'rep_' + Date.now(),
+          timestamp: nowIso,
+          stationId: fromColumn.id,
+          stationName: fromColumn.title,
+          operator: op,
+          quantity: qty,
+          totalSoFar: qty,
+          orderTotal: targetOrder.batchSize,
+          note: `Slutförd och arkiverad vid sista stationen (${fromColumn.title}) via QR-skanning`,
+        },
+        ...(targetOrder.reports || []),
+      ],
+      notes: [
+        {
+          id: 'n_arch_' + Date.now(),
+          timestamp: nowIso,
+          operator: op,
+          text: `Order slutförd vid sista stationen "${fromColumn.title}" och flyttad till arkiv vid QR-skanning.`,
+          type: 'approved',
+          stageName: fromColumn.title,
+        },
+        ...(targetOrder.notes || []),
+      ],
+    };
+
+    // Remove from active orders
+    currentState.orders.splice(foundIndex, 1);
+    // Add to archived orders
+    currentState.archivedOrders = [
+      completedOrder,
+      ...(currentState.archivedOrders || []).filter((o: any) => o.id !== targetOrder.id),
+    ];
+    saveServerState(currentState);
+
     broadcast({
-      type: 'ORDER_AT_LAST_STATION',
+      type: 'ORDER_ARCHIVED',
       orderId: targetOrder.id,
+      order: completedOrder,
       stationTitle: fromColumn.title,
-      order: targetOrder,
+      archivedOrders: currentState.archivedOrders,
+      orders: currentState.orders,
     });
 
     return {
       status: 200,
       data: {
         success: true,
+        archived: true,
         isLastStation: true,
-        order: targetOrder,
-        message: `Order ${targetOrder.id} har nått sista stationen ("${fromColumn.title}").`,
+        orderId: targetOrder.id,
+        order: completedOrder,
+        from: fromColumn.title,
+        to: 'Arkiv (Slutförd)',
+        message: `✓ Order ${targetOrder.id} har slutförts vid "${fromColumn.title}" och arkiverats!`,
       },
     };
   }
@@ -476,13 +578,13 @@ function executeScanLogic(body: {
     updatedAt: nowIso,
     stationProgress: {
       ...(targetOrder.stationProgress || {}),
-      [refStationId]: qty,
+      [fromColumn.id]: qty,
     },
     reports: [
       {
         id: 'rep_' + Date.now(),
         timestamp: nowIso,
-        stationId: refStationId,
+        stationId: fromColumn.id,
         stationName: fromColumn.title,
         operator: op,
         quantity: qty,

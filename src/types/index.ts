@@ -53,6 +53,7 @@ export interface ProductionOrder {
   archivedAt?: string;
   archivedBy?: string;
   archivedReason?: string;
+  completedAt?: string;
 }
 
 export interface ColumnConfig {

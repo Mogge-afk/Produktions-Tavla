@@ -18,7 +18,8 @@ import {
   Zap,
   Radio,
   Smartphone,
-  Clock
+  Clock,
+  Trash2
 } from 'lucide-react';
 import { Priority } from '../types';
 
@@ -46,6 +47,7 @@ interface HeaderProps {
   syncStatus?: 'connected' | 'connecting' | 'offline';
   hasDemoOrders?: boolean;
   onClearDemoOrders?: () => void;
+  onOpenClearAll?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -72,6 +74,7 @@ export const Header: React.FC<HeaderProps> = ({
   syncStatus = 'connected',
   hasDemoOrders = false,
   onClearDemoOrders,
+  onOpenClearAll,
 }) => {
   const [currentTime, setCurrentTime] = useState<string>('');
   const [currentDate, setCurrentDate] = useState<string>('');
@@ -178,15 +181,16 @@ export const Header: React.FC<HeaderProps> = ({
               <span>Importera Excel / ERP</span>
             </button>
 
-            {/* Quick Demo Orders Cleanup Button */}
-            {hasDemoOrders && onClearDemoOrders && (
+            {/* Delete All Orders Button (Replaces återställa) */}
+            {totalOrdersCount > 0 && onOpenClearAll && (
               <button
-                onClick={onClearDemoOrders}
+                onClick={onOpenClearAll}
                 type="button"
-                className="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-lg text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer animate-pulse"
-                title="Klicka här för att permanent ta bort de 4 inbyggda demo-artiklarna (AO-2026-101 etc.) från tavlan"
+                className="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-lg text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer"
+                title="Radera samtliga ordrar från tavlan (töm tavlan helt inför ny import)"
               >
-                <span>🗑️ Rensa demo-artiklar</span>
+                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                <span>Radera allt</span>
               </button>
             )}
 

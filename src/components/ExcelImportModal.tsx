@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useCallback } from 'react';
 import { 
   X, 
   Upload, 
@@ -75,17 +75,70 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
   const [duplicateStrategy, setDuplicateStrategy] = useState<'update' | 'skip'>('skip');
   const [clearDemoOrders, setClearDemoOrders] = useState<boolean>(true);
 
-  const existingActiveIds = useMemo(() => new Set(existingOrders.map((o) => o.id.toUpperCase())), [existingOrders]);
-  const existingArchivedIds = useMemo(() => new Set((archivedOrders || []).map((o) => o.id.toUpperCase())), [archivedOrders]);
+  // Normalized map of active and archived orders (matches exact ID and ID with/without leading P)
+  const { existingActiveMap, existingArchivedMap } = useMemo(() => {
+    const active = new Map<string, ProductionOrder>();
+    for (const o of existingOrders) {
+      const upper = o.id.trim().toUpperCase();
+      active.set(upper, o);
+      if (upper.startsWith('P')) {
+        active.set(upper.slice(1), o);
+      } else {
+        active.set(`P${upper}`, o);
+      }
+    }
+
+    const arch = new Map<string, ProductionOrder>();
+    for (const o of (archivedOrders || [])) {
+      const upper = o.id.trim().toUpperCase();
+      arch.set(upper, o);
+      if (upper.startsWith('P')) {
+        arch.set(upper.slice(1), o);
+      } else {
+        arch.set(`P${upper}`, o);
+      }
+    }
+
+    return { existingActiveMap: active, existingArchivedMap: arch };
+  }, [existingOrders, archivedOrders]);
+
+  const checkRowDuplicate = useCallback(
+    (orderId: string) => {
+      const upper = orderId.trim().toUpperCase();
+      const existingActive = existingActiveMap.get(upper);
+      if (existingActive) return { isDuplicate: true, isArchived: false, existingOrder: existingActive };
+
+      const existingArchived = existingArchivedMap.get(upper);
+      if (existingArchived) return { isDuplicate: false, isArchived: true, existingOrder: existingArchived };
+
+      return { isDuplicate: false, isArchived: false, existingOrder: undefined };
+    },
+    [existingActiveMap, existingArchivedMap]
+  );
 
   const newOrdersCount = useMemo(() => {
-    return parsedRows.filter(
-      (r) =>
-        r.isValid &&
-        !existingActiveIds.has(r.orderId.toUpperCase()) &&
-        !existingArchivedIds.has(r.orderId.toUpperCase())
-    ).length;
-  }, [parsedRows, existingActiveIds, existingArchivedIds]);
+    return parsedRows.filter((r) => {
+      if (!r.isValid) return false;
+      const dup = checkRowDuplicate(r.orderId);
+      return !dup.isDuplicate && !dup.isArchived;
+    }).length;
+  }, [parsedRows, checkRowDuplicate]);
+
+  const selectOnlyNewRows = useCallback(
+    (rows: ParsedRow[]) => {
+      const newIndices = new Set<number>();
+      rows.forEach((r) => {
+        if (r.isValid) {
+          const dup = checkRowDuplicate(r.orderId);
+          if (!dup.isDuplicate && !dup.isArchived) {
+            newIndices.add(r.rowIndex);
+          }
+        }
+      });
+      return newIndices;
+    },
+    [checkRowDuplicate]
+  );
 
   if (!isOpen) return null;
 
@@ -114,19 +167,8 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
       setParsedRows(res.rows);
 
       // By default: ONLY select brand NEW orders that don't already exist on the board or archive!
-      const validNewIndices = new Set<number>(
-        res.rows
-          .filter(
-            (r) =>
-              r.isValid &&
-              !existingActiveIds.has(r.orderId.toUpperCase()) &&
-              !existingArchivedIds.has(r.orderId.toUpperCase())
-          )
-          .map((r) => r.rowIndex)
-      );
-
-      // Fallback: if all are new or user imports for first time
-      setSelectedRowIndices(validNewIndices.size > 0 ? validNewIndices : new Set(res.rows.filter((r) => r.isValid).map((r) => r.rowIndex)));
+      const validNewIndices = selectOnlyNewRows(res.rows);
+      setSelectedRowIndices(validNewIndices);
     } catch (err: any) {
       console.error(err);
       setErrorMessage(`Kunde inte läsa Excel-filen: ${err?.message || 'Kontrollera filformatet (.xlsx, .xls, .csv)'}`);
@@ -159,22 +201,14 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
     if (rawRows.length > 0) {
       const updatedRows = processRowsWithMapping(rawRows, updatedMapping, prioritySettings);
       setParsedRows(updatedRows);
-      const validIndices = new Set<number>(updatedRows.filter((r) => r.isValid).map((r) => r.rowIndex));
-      setSelectedRowIndices(validIndices);
+      // Re-apply select only new rows with the updated order IDs
+      const validNewIndices = selectOnlyNewRows(updatedRows);
+      setSelectedRowIndices(validNewIndices);
     }
   };
 
   const handleSelectOnlyNew = () => {
-    const newOnly = new Set<number>(
-      parsedRows
-        .filter(
-          (r) =>
-            r.isValid &&
-            !existingActiveIds.has(r.orderId.toUpperCase()) &&
-            !existingArchivedIds.has(r.orderId.toUpperCase())
-        )
-        .map((r) => r.rowIndex)
-    );
+    const newOnly = selectOnlyNewRows(parsedRows);
     setSelectedRowIndices(newOnly);
   };
 
@@ -215,7 +249,20 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
     const toImport = parsedRows.filter((r) => selectedRowIndices.has(r.rowIndex) && r.isValid);
     if (toImport.length === 0) return;
 
-    const newProductionOrders: ProductionOrder[] = toImport.map((row) => {
+    // Filter strictly if strategy is skip: only genuinely new orders are sent!
+    const effectiveRows = duplicateStrategy === 'skip'
+      ? toImport.filter((r) => {
+          const dup = checkRowDuplicate(r.orderId);
+          return !dup.isDuplicate && !dup.isArchived;
+        })
+      : toImport;
+
+    if (effectiveRows.length === 0) {
+      alert('Inga nya ordrar är valda att importeras då de redan finns på tavlan.');
+      return;
+    }
+
+    const newProductionOrders: ProductionOrder[] = effectiveRows.map((row) => {
       return {
         id: row.orderId.toUpperCase(),
         title: row.title,
@@ -718,8 +765,10 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                     <tbody className="divide-y divide-neutral-200">
                       {parsedRows.map((row) => {
                         const isSelected = selectedRowIndices.has(row.rowIndex);
-                        const isDuplicate = existingActiveIds.has(row.orderId.toUpperCase());
-                        const isArchived = existingArchivedIds.has(row.orderId.toUpperCase());
+                        const dup = checkRowDuplicate(row.orderId);
+                        const isDuplicate = dup.isDuplicate;
+                        const isArchived = dup.isArchived;
+                        const existingCol = dup.existingOrder ? columns.find((c) => c.id === dup.existingOrder?.columnId) : null;
                         const dueStatus = getDueStatus(row.targetDate);
 
                         return (
@@ -777,16 +826,16 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                             </td>
                             <td className="p-3">
                               {isArchived ? (
-                                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-100 text-purple-800 border border-purple-200">
-                                  I arkivet / Slutförd
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-100 text-purple-900 border border-purple-300">
+                                  Slutförd i arkiv (hoppas över)
                                 </span>
                               ) : isDuplicate ? (
-                                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800 border border-blue-200">
-                                  Finns redan ({duplicateStrategy === 'update' ? 'Uppdateras' : 'Hoppas över'})
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-900 border border-blue-300">
+                                  Finns redan{existingCol ? ` (i ${existingCol.title})` : ''} · {duplicateStrategy === 'update' ? 'Uppdateras' : 'Hoppas över'}
                                 </span>
                               ) : (
-                                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
-                                  Ny order
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 border border-emerald-300">
+                                  ✓ Ny order
                                 </span>
                               )}
                             </td>

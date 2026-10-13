@@ -11,6 +11,7 @@ export interface ScanApiResponse {
   to?: string;
   isLastStation?: boolean;
   isArchived?: boolean;
+  archived?: boolean;
   order?: ProductionOrder;
   message?: string;
   error?: string;
@@ -27,9 +28,11 @@ type ScanEventListener = (data: {
   orderId?: string;
   fromStation?: string;
   toStation?: string;
+  stationTitle?: string;
   toColumnId?: string;
   order?: ProductionOrder;
   orders?: ProductionOrder[];
+  archivedOrders?: ProductionOrder[];
 }) => void;
 
 type StatusListener = (status: SyncStatus) => void;
@@ -129,6 +132,8 @@ class ApiSyncManager {
       this.stateListeners.forEach((fn) => fn({ orders: data.orders }));
     } else if (data.type === 'ORDERS_UPDATED' && data.orders) {
       this.stateListeners.forEach((fn) => fn({ orders: data.orders }));
+    } else if (data.type === 'ORDER_ARCHIVED') {
+      this.stateListeners.forEach((fn) => fn({ orders: data.orders, archivedOrders: data.archivedOrders }));
     } else if (data.type === 'COLUMNS_UPDATED' && data.columns) {
       this.stateListeners.forEach((fn) => fn({ columns: data.columns }));
     } else if (data.type === 'ARCHIVED_UPDATED' && data.archivedOrders) {

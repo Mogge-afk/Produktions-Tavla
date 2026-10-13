@@ -16,7 +16,9 @@ import {
   Sparkles,
   Edit2,
   Archive,
-  AlertTriangle
+  AlertTriangle,
+  ShieldCheck,
+  ArrowRight
 } from 'lucide-react';
 import { ColumnConfig, ProductionOrder, ProductionNote, ProductionReport, ChecklistItem, Priority } from '../types';
 import { generateQRCodeDataUrl, formatStationQRPayload } from '../utils/qr';
@@ -60,9 +62,9 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   const [editArticleNumber, setEditArticleNumber] = useState('');
 
   useEffect(() => {
-    if (order) {
-      const activeStation = selectedStationQR || order.columnId || columns[0]?.id || '';
-      setSelectedStationQR(activeStation);
+    if (order && isOpen) {
+      // Always synchronize to the order's current active station so the correct QR appears immediately
+      setSelectedStationQR(order.columnId || columns[0]?.id || '');
       setOperator(getStoredOperatorName() || order.operator || 'Kalle.K');
       setEditDate(order.targetDate);
       setEditPriority(order.priority);
@@ -70,7 +72,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
       setEditArticleNumber(order.articleNumber);
       setIsEditingSpecs(false);
     }
-  }, [order, isOpen, columns]);
+  }, [order?.id, order?.columnId, isOpen, columns]);
 
   // Update QR preview whenever selected station changes
   useEffect(() => {
@@ -78,11 +80,17 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
       const payload = formatStationQRPayload(order.id, selectedStationQR);
       generateQRCodeDataUrl(payload, { width: 300, margin: 2 }).then(setQrDataUrl);
     }
-  }, [order, selectedStationQR]);
+  }, [order?.id, selectedStationQR]);
 
   if (!isOpen || !order) return null;
 
   const currentColumn = columns.find((c) => c.id === order.columnId);
+  const currentColumnIndex = columns.findIndex((c) => c.id === order.columnId);
+  const effectiveCurrentIndex = currentColumnIndex >= 0 ? currentColumnIndex : 0;
+  const nextColumn = effectiveCurrentIndex < columns.length - 1 ? columns[effectiveCurrentIndex + 1] : null;
+  const isSelectedActiveStation = selectedStationQR === order.columnId;
+  const selectedStationObj = columns.find((c) => c.id === selectedStationQR) || currentColumn;
+
   const orderTotal = order.batchSize || 1;
   const dueStatus = getDueStatus(order.targetDate);
 
@@ -105,6 +113,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
       notes: [newNote, ...order.notes],
     };
     onUpdateOrder(updated);
+    setSelectedStationQR(newColId);
   };
 
   const handleSaveSpecs = (e: React.FormEvent) => {
@@ -674,27 +683,63 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
           {/* Right Col: Stationsbunden QR-kod */}
           <div className="space-y-4">
             <div className="bg-neutral-50 p-4 rounded-xl border-2 border-neutral-900 text-center flex flex-col items-center">
-              <span className="text-xs font-black uppercase tracking-wider text-neutral-700 mb-1">
-                Stationsbunden QR-kod
-              </span>
+              <div className="flex items-center gap-1.5 mb-2">
+                <QrCode className="w-4 h-4 text-neutral-800" />
+                <span className="text-xs font-black uppercase tracking-wider text-neutral-800">
+                  Stationsbunden QR-kod
+                </span>
+              </div>
 
               {/* Station selector for QR preview */}
-              <div className="w-full mb-3">
+              <div className="w-full mb-3 text-left">
                 <label className="text-[10px] text-neutral-500 font-bold block mb-1">
                   Välj station att visa QR för:
                 </label>
                 <select
                   value={selectedStationQR}
                   onChange={(e) => setSelectedStationQR(e.target.value)}
-                  className="w-full text-xs font-bold px-2 py-1.5 bg-white border border-neutral-300 rounded-lg text-neutral-900"
+                  className="w-full text-xs font-bold px-2 py-1.5 bg-white border border-neutral-300 rounded-lg text-neutral-900 focus:outline-hidden focus:ring-2 focus:ring-neutral-900"
                 >
-                  {columns.map((c) => (
+                  {columns.map((c, idx) => (
                     <option key={c.id} value={c.id}>
-                      {c.title}
+                      {idx + 1}. {c.title} {c.id === order.columnId ? '★ (Aktiv station)' : ''}
                     </option>
                   ))}
                 </select>
               </div>
+
+              {/* Active station status banner */}
+              {isSelectedActiveStation ? (
+                <div className="w-full mb-2 bg-emerald-50 border border-emerald-300 rounded-lg p-2 text-left flex items-start gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <div className="text-[11px] text-emerald-950">
+                    <span className="font-black text-emerald-900 block">
+                      Rätt QR för aktiv station: {currentColumn?.title}
+                    </span>
+                    <span className="text-[10px] text-emerald-800 block mt-0.5">
+                      Skanna denna kod vid stationen för att slutföra steget och gå vidare till {nextColumn ? `"${nextColumn.title}"` : 'arkivet'}.
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="w-full mb-2 bg-amber-50 border border-amber-300 rounded-lg p-2 text-left flex items-start justify-between gap-1">
+                  <div className="text-[11px] text-amber-950">
+                    <span className="font-bold text-amber-900 block">
+                      Visar kod för &quot;{selectedStationObj?.title}&quot;
+                    </span>
+                    <span className="text-[10px] text-amber-800 block mt-0.5">
+                      Ordern är på <strong>{currentColumn?.title}</strong>. Skannas denna kod blockeras den av spärren.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedStationQR(order.columnId)}
+                    className="shrink-0 text-[10px] bg-amber-600 hover:bg-amber-700 text-white font-bold px-2 py-1 rounded cursor-pointer transition"
+                  >
+                    Återgå
+                  </button>
+                </div>
+              )}
 
               {qrDataUrl ? (
                 <div className="p-3 bg-white rounded-lg border border-neutral-300 shadow-xs mb-2">
@@ -705,10 +750,12 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
               )}
 
               <div className="font-mono text-xs font-black text-neutral-900 mb-1">
-                {order.id} : {columns.find((c) => c.id === selectedStationQR)?.title}
+                {order.id} : {selectedStationObj?.title}
               </div>
               <p className="text-[11px] text-neutral-500 leading-tight mb-3">
-                Skanna denna kod vid stationen för att öppna formuläret med Namn, Antal och Totalt.
+                {isSelectedActiveStation 
+                  ? 'Skanna denna kod vid stationen för att slutföra momentet och gå vidare till nästa fas.'
+                  : `Denna kod är låst till ${selectedStationObj?.title}.`}
               </p>
 
               <div className="flex flex-col w-full gap-2">

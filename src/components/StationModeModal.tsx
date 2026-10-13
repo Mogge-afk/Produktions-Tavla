@@ -5,11 +5,12 @@ import {
   User, 
   CheckCircle2, 
   Sparkles,
-  QrCode
+  QrCode,
+  AlertTriangle
 } from 'lucide-react';
 import { ColumnConfig, ProductionOrder } from '../types';
-import { extractScanPayload } from '../utils/qr';
-import { playScanSuccessSound } from '../utils/audio';
+import { extractScanPayload, findOrderFlexible } from '../utils/qr';
+import { playScanSuccessSound, playWarningSound } from '../utils/audio';
 import { getStoredOperatorName, setStoredOperatorName } from '../utils/storage';
 
 interface StationModeModalProps {
@@ -43,6 +44,7 @@ export const StationModeModal: React.FC<StationModeModalProps> = ({
   const [quantity, setQuantity] = useState<number>(30);
   const [noteText, setNoteText] = useState('');
   const [lastCheckinMessage, setLastCheckinMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     setOperator(getStoredOperatorName() || 'Kalle.K');
@@ -59,12 +61,34 @@ export const StationModeModal: React.FC<StationModeModalProps> = ({
   const stationOrders = allOrders.filter((o) => o.columnId === selectedStationId);
 
   const handleOrderScan = (rawText: string) => {
+    setErrorMessage(null);
     const { orderId, stationId } = extractScanPayload(rawText);
     if (!orderId) return;
 
-    const found = allOrders.find((o) => o.id.toLowerCase() === orderId.toLowerCase());
+    const found = findOrderFlexible(allOrders, orderId);
     if (!found) {
-      alert(`Order ${orderId} hittades inte.`);
+      playWarningSound();
+      setErrorMessage(`Order "${orderId}" hittades inte på produktionstavlan.`);
+      return;
+    }
+
+    const effectiveStationId = stationId || selectedStationId;
+    const currentOrderColIdx = columns.findIndex((c) => c.id === found.columnId);
+    const terminalColIdx = columns.findIndex((c) => c.id === effectiveStationId);
+    const orderCol = columns[currentOrderColIdx] || columns[0];
+    const terminalCol = columns[terminalColIdx] || columns[0];
+
+    // SPÄRR: Cannot skip ahead
+    if (currentOrderColIdx < terminalColIdx) {
+      playWarningSound();
+      setErrorMessage(`⛔ SPÄRR: Order ${found.id} befinner sig på station "${orderCol.title}". Den kan inte rapporteras vid "${terminalCol.title}" förrän föregående steg är klara.`);
+      return;
+    }
+
+    // SPÄRR: Cannot go backwards
+    if (currentOrderColIdx > terminalColIdx) {
+      playWarningSound();
+      setErrorMessage(`⛔ SPÄRR: Order ${found.id} har redan passerat station "${terminalCol.title}" och befinner sig på "${orderCol.title}". Det går inte att gå bakåt i flödet.`);
       return;
     }
 
@@ -72,7 +96,7 @@ export const StationModeModal: React.FC<StationModeModalProps> = ({
       setSelectedStationId(stationId);
     }
 
-    const prevDone = found.stationProgress?.[stationId || selectedStationId] || 0;
+    const prevDone = found.stationProgress?.[effectiveStationId] || 0;
     const remaining = Math.max(0, found.batchSize - prevDone);
     setQuantity(remaining > 0 ? (remaining >= 30 ? 30 : remaining) : found.batchSize);
 
@@ -213,6 +237,22 @@ export const StationModeModal: React.FC<StationModeModalProps> = ({
                 {lastCheckinMessage && (
                   <div className="mt-4 p-3 bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-md">
                     {lastCheckinMessage}
+                  </div>
+                )}
+
+                {errorMessage && (
+                  <div className="mt-4 p-3.5 bg-rose-600 text-white rounded-xl text-xs font-bold shadow-md flex items-start justify-between gap-2 text-left animate-in shake duration-200">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                      <span>{errorMessage}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setErrorMessage(null)}
+                      className="text-white/80 hover:text-white font-black text-sm shrink-0"
+                    >
+                      ×
+                    </button>
                   </div>
                 )}
 

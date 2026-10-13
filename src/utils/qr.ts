@@ -315,40 +315,114 @@ export function extractOrderIdFromScan(scannedText: string): string {
   return extractScanPayload(scannedText).orderId;
 }
 
+export interface DetermineNextColumnResult {
+  nextColumn: ColumnConfig | null;
+  isLastColumn: boolean;
+  fromColumn: ColumnConfig | null;
+  blocked?: boolean;
+  blockReason?: 'skip_ahead' | 'go_back' | 'invalid_station';
+  currentColumn?: ColumnConfig | null;
+  scannedColumn?: ColumnConfig | null;
+  message?: string;
+}
+
 /**
- * Helper to calculate the next column in sequence.
- * If scannedStationId is given, moves to the column AFTER that station.
- * If only currentColumnId is given, moves to the column AFTER the current column.
+ * Helper to calculate the next column in sequence with a SPÄRR (guardrail).
+ * 
+ * Rules:
+ * 1. If scannedStationId is provided:
+ *    - The scanned station MUST match the order's CURRENT station (order completes current station and moves to next).
+ *    - If scanned station is ahead (e.g. order is at Produktion, but scanned Test): BLOCKED (cannot skip steps)!
+ *    - If scanned station is behind (e.g. order is at Produktion, but scanned Material): BLOCKED (cannot go backwards)!
+ * 2. If scannedStationId is not provided (master QR code / order barcode):
+ *    - Moves exactly 1 step forward from current station (no skipping, no going back).
  */
 export function determineNextColumn(
   columns: ColumnConfig[],
   currentColumnId: string,
   scannedStationId?: string
-): { nextColumn: ColumnConfig | null; isLastColumn: boolean; fromColumn: ColumnConfig | null } {
-  // Determine reference station: prioritize the scanned station if valid, otherwise current column
-  const refStationId = scannedStationId || currentColumnId;
-  const refIndex = columns.findIndex((c) => c.id === refStationId);
-  const fromCol = columns.find((c) => c.id === refStationId) || columns.find((c) => c.id === currentColumnId) || null;
+): DetermineNextColumnResult {
+  const currentIdx = columns.findIndex((c) => c.id === currentColumnId);
+  const effectiveCurrentIdx = currentIdx >= 0 ? currentIdx : 0;
+  const currentCol = columns[effectiveCurrentIdx] || columns[0] || null;
 
-  if (refIndex === -1) {
-    // If reference station not found, fallback to order's current column index
-    const currentIdx = columns.findIndex((c) => c.id === currentColumnId);
-    if (currentIdx >= 0 && currentIdx < columns.length - 1) {
+  // Case 1: Station-specific scan (e.g. ORD:P37275:col-test or ORD:P37275:col-produktion)
+  if (scannedStationId && scannedStationId.trim()) {
+    const cleanScannedStation = scannedStationId.trim().toLowerCase();
+    const scannedCol = columns.find(
+      (c) =>
+        c.id.toLowerCase() === cleanScannedStation ||
+        c.title.toLowerCase() === cleanScannedStation
+    );
+
+    if (!scannedCol) {
+      // Scanned station does not exist in column configuration
       return {
-        nextColumn: columns[currentIdx + 1],
-        isLastColumn: currentIdx + 1 === columns.length - 1,
-        fromColumn: columns[currentIdx],
+        nextColumn: null,
+        isLastColumn: false,
+        fromColumn: currentCol,
+        currentColumn: currentCol,
+        blocked: true,
+        blockReason: 'invalid_station',
+        message: `Stationen "${scannedStationId}" hittades inte i kolumninställningarna.`,
       };
     }
-    return { nextColumn: null, isLastColumn: true, fromColumn: fromCol };
+
+    const scannedIdx = columns.findIndex((c) => c.id === scannedCol.id);
+
+    // Guardrail 1: Trying to skip steps ahead (e.g. order is at Produktion, scanned Test)
+    if (scannedIdx > effectiveCurrentIdx) {
+      const nextExpected = columns[effectiveCurrentIdx + 1];
+      return {
+        nextColumn: null,
+        isLastColumn: false,
+        fromColumn: currentCol,
+        currentColumn: currentCol,
+        scannedColumn: scannedCol,
+        blocked: true,
+        blockReason: 'skip_ahead',
+        message: `⛔ SPÄRR: Ordern befinner sig på station "${currentCol?.title || 'Okänd'}". Du skannade koden för "${scannedCol.title}". Det går inte att hoppa över steg! Skanna koden för "${currentCol?.title || 'nuvarande station'}" för att slutföra steget och gå vidare till "${nextExpected?.title || 'nästa station'}".`,
+      };
+    }
+
+    // Guardrail 2: Trying to go backwards (e.g. order is at Produktion, scanned Material)
+    if (scannedIdx < effectiveCurrentIdx) {
+      return {
+        nextColumn: null,
+        isLastColumn: false,
+        fromColumn: currentCol,
+        currentColumn: currentCol,
+        scannedColumn: scannedCol,
+        blocked: true,
+        blockReason: 'go_back',
+        message: `⛔ SPÄRR: Ordern har redan passerat station "${scannedCol.title}" och befinner sig på "${currentCol?.title || 'nuvarande station'}". Det går inte att gå bakåt i flödet! Skanna koden för "${currentCol?.title || 'nuvarande station'}" för att gå vidare.`,
+      };
+    }
+
+    // Scanned station matches the order's current station: order is completed here and advances 1 step!
+    const isLast = effectiveCurrentIdx >= columns.length - 1;
+    const nextCol = !isLast ? columns[effectiveCurrentIdx + 1] : null;
+
+    return {
+      nextColumn: nextCol,
+      isLastColumn: isLast,
+      fromColumn: currentCol,
+      currentColumn: currentCol,
+      scannedColumn: scannedCol,
+      blocked: false,
+    };
   }
 
-  const isLast = refIndex >= columns.length - 1;
-  const nextCol = !isLast ? columns[refIndex + 1] : null;
+  // Case 2: Master QR code / general scan without station (order barcode)
+  // Advances exactly 1 step forward from current station (sequential)
+  const isLast = effectiveCurrentIdx >= columns.length - 1;
+  const nextCol = !isLast ? columns[effectiveCurrentIdx + 1] : null;
 
   return {
     nextColumn: nextCol,
     isLastColumn: isLast,
-    fromColumn: fromCol,
+    fromColumn: currentCol,
+    currentColumn: currentCol,
+    blocked: false,
   };
 }

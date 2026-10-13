@@ -20,7 +20,7 @@ import { Html5Qrcode } from 'html5-qrcode';
 import { ProductionOrder, ColumnConfig } from '../types';
 import { apiSync, ScanApiResponse, SyncStatus } from '../utils/apiSync';
 import { offlineQueue, QueuedScanItem } from '../utils/offlineQueue';
-import { playScanSuccessSound } from '../utils/audio';
+import { playScanSuccessSound, playWarningSound } from '../utils/audio';
 import { OfflineQueueModal } from './OfflineQueueModal';
 
 interface MobileScannerViewProps {
@@ -134,8 +134,6 @@ export const MobileScannerView: React.FC<MobileScannerViewProps> = ({
       navigator.vibrate([80, 50, 80]);
     }
 
-    playScanSuccessSound();
-
     try {
       const payload: any = { scan: rawString, operator: operatorName.trim() };
       if (activeStationId !== 'auto') {
@@ -145,12 +143,17 @@ export const MobileScannerView: React.FC<MobileScannerViewProps> = ({
       const res = await apiSync.postScan(payload);
       setLastScanResult(res);
 
-      if (res.success) {
+      if (res.success || res.queuedOffline) {
+        playScanSuccessSound();
         // Clear message after 4.5 seconds
         setTimeout(() => {
           setLastScanResult(null);
         }, 4500);
+      } else {
+        playWarningSound();
       }
+    } catch {
+      playWarningSound();
     } finally {
       setIsSubmitting(false);
     }
@@ -318,10 +321,18 @@ export const MobileScannerView: React.FC<MobileScannerViewProps> = ({
               <div className="space-y-1">
                 <div className="flex items-center justify-center gap-1.5 text-emerald-400 font-black text-base">
                   <CheckCircle2 className="w-5 h-5" />
-                  <span>{lastScanResult.orderId} FLYTTAD!</span>
+                  <span>
+                    {lastScanResult.archived
+                      ? `${lastScanResult.orderId} SLUTFÖRD & ARKIVERAD!`
+                      : `${lastScanResult.orderId} FLYTTAD!`}
+                  </span>
                 </div>
                 <div className="text-xs text-neutral-300">
-                  {lastScanResult.from ? (
+                  {lastScanResult.archived ? (
+                    <span>
+                      Slutförd vid <strong className="text-white">{lastScanResult.from || 'sista stationen'}</strong> ➔ Flyttad till <strong className="text-emerald-300">Arkiv</strong>
+                    </span>
+                  ) : lastScanResult.from ? (
                     <span>
                       Från <strong className="text-white">{lastScanResult.from}</strong> ➔ Till <strong className="text-emerald-300 text-sm">{lastScanResult.to}</strong>
                     </span>
